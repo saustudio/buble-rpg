@@ -1,0 +1,1398 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ARPG sauwork</title>
+    <style>
+
+/* ================================================================
+   ARPG на PixiJS — стили (шрифты увеличены в 2 раза)
+   ================================================================ */
+
+/* ================================================================
+   01. CSS-ПЕРЕМЕННЫЕ (ДИЗАЙН-ТОКЕНЫ)
+   ================================================================ */
+:root {
+    --bg-body: #1a1e2c;
+    --bg-panel: #232837;
+    --bg-panel-dark: #14141f;
+    --bg-panel-darker: #0a0d1a;
+    --bg-hud: rgba(35, 56, 55, 0.8);
+    --bg-overlay: rgba(0, 0, 0, 0.6);
+
+    --border-panel: #3e4b66;
+    --border-divider: #2a3450;
+    --border-hud: #3e4b66;
+
+    --text-primary: #d6e2f0;
+    --text-muted: #667799;
+    --text-soft: #8899bb;
+    --text-accent: #b7cdff;
+    --text-on-dark: #ffffff;
+
+    --rarity-normal: rgb(200, 200, 200);
+    --rarity-magic: rgb(136, 136, 255);
+    --rarity-rare: rgb(255, 255, 119);
+    --rarity-unique: rgb(175, 96, 37);
+    --rarity-legendary: #ff6f00;
+
+    --rarity-bg-normal: rgba(144, 144, 144, 0.15);
+    --rarity-bg-magic: rgba(76, 175, 80, 0.15);
+    --rarity-bg-rare: rgba(33, 150, 243, 0.15);
+    --rarity-bg-legendary: rgba(255, 111, 0, 0.15);
+    --rarity-bg-unique: rgba(255, 215, 0, 0.15);
+
+    --affix-explicit: #88f;
+    --affix-explicit-unsupport: red;
+
+    --value-changed: #88f;
+    --value-default: #ffffff;
+    --value-fire: rgb(150, 0, 0);
+    --value-cold: rgb(54, 100, 146);
+    --value-light: rgb(255, 215, 0);
+
+    --colour-hp: #ff7a7a;
+    --colour-xp: #c3adff;
+    --colour-level: #f5c542;
+    --colour-wave: #ff6bff;
+    --colour-timer: #44ddff;
+    --colour-enemy: #ff7a7a;
+    --colour-danger: #ff4444;
+    --colour-success: #44dd88;
+    --colour-worse: #ff6644;
+
+    --radius-xs: 3px;
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-2xl: 28px;
+}
+
+/* ================================================================
+   02. БАЗОВЫЙ СБРОС И BODY
+   ================================================================ */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: var(--bg-body);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 20px; /* базовый размер увеличен */
+    padding: 20px;
+}
+
+button {
+    font-family: inherit;
+}
+
+/* ================================================================
+   03. УТИЛИТЫ И ОБЩИЕ КЛАССЫ РЕДКОСТИ
+   ================================================================ */
+.rarity-common    { color: var(--rarity-normal); }
+.rarity-magic     { color: var(--rarity-magic); }
+.rarity-rare      { color: var(--rarity-rare); }
+.rarity-legendary { color: var(--rarity-legendary); }
+.rarity-unique    { color: var(--rarity-unique); }
+
+.rarity-tag-common,
+.rarity-tag-magic,
+.rarity-tag-rare,
+.rarity-tag-legendary,
+.rarity-tag-unique {
+    font-weight: 600;
+    padding: 0 8px;
+    border-radius: var(--radius-xs);
+    font-size: 0.7rem; /* было 0.65rem -> 0.7rem (увеличено) */
+    letter-spacing: 0.5px;
+}
+
+.rarity-tag-common    { color: var(--rarity-normal);    background: var(--rarity-bg-normal); }
+.rarity-tag-magic     { color: var(--rarity-magic);     background: var(--rarity-bg-magic); }
+.rarity-tag-rare      { color: var(--rarity-rare);      background: var(--rarity-bg-rare); }
+.rarity-tag-legendary { color: var(--rarity-legendary); background: var(--rarity-bg-legendary); }
+.rarity-tag-unique    { color: var(--rarity-unique);    background: var(--rarity-bg-unique); }
+
+/* ================================================================
+   04. АНИМАЦИИ
+   ================================================================ */
+@keyframes blink {
+    from { opacity: 1; }
+    to   { opacity: 0.3; }
+}
+
+@keyframes lootPulse {
+    from { opacity: 0.6; transform: scale(0.9); }
+    to   { opacity: 1;   transform: scale(1.1); }
+}
+
+@keyframes tabFade {
+    from { opacity: 0; transform: translateY(2px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ================================================================
+   05. LAYOUT ПРИЛОЖЕНИЯ
+   ================================================================ */
+.app-layout {
+    display: flex;
+    gap: 24px;
+    max-width: 1600px; /* немного шире, чтобы влезли увеличенные шрифты */
+    width: 100%;
+    align-items: flex-start;
+}
+
+.game-wrapper {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.game-canvas-container {
+    position: relative;
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    flex: 1;
+    min-height: 400px;
+}
+
+/* ================================================================
+   06. ПАНЕЛЬ СТАТОВ — табы
+   ================================================================ */
+.stats-panel {
+    flex: 0 0 420px; /* шире из-за крупных шрифтов */
+    background: var(--bg-panel);
+    border-radius: var(--radius-2xl);
+    padding: 20px 18px;
+    box-shadow:
+        inset 0 2px 8px rgba(0, 0, 0, 0.6),
+        0 12px 32px rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--border-panel);
+    color: var(--text-primary);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Скрытые радио */
+.tab-input { display: none; }
+
+/* ─── Панель табов ─── */
+.tab-bar {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 4px;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: var(--radius-md);
+    padding: 4px;
+    border: 1px solid var(--border-divider);
+}
+
+.tab-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 10px 6px 8px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 0.9rem; /* было 0.7rem */
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    transition: background 0.18s ease, color 0.18s ease;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.tab-btn:hover {
+    color: var(--text-accent);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.tab-btn .tab-icon {
+    font-size: 1.3rem; /* было 1rem */
+    line-height: 1;
+}
+
+.tab-btn .tab-name {
+    font-size: 0.8rem; /* было 0.62rem */
+    line-height: 1;
+}
+
+/* Активный таб */
+#tabWeapon:checked ~ .tab-bar label[for="tabWeapon"],
+#tabChar:checked   ~ .tab-bar label[for="tabChar"],
+#tabDef:checked    ~ .tab-bar label[for="tabDef"] {
+    background: var(--bg-panel-dark);
+    color: var(--text-accent);
+    box-shadow:
+        0 1px 4px rgba(0, 0, 0, 0.4),
+        inset 0 0 0 1px var(--border-panel);
+}
+
+/* ─── Контент ─── */
+.tab-content {
+    position: relative;
+    min-height: 380px; /* чуть выше */
+}
+
+.tab-pane {
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+    animation: tabFade 0.18s ease;
+}
+
+#tabWeapon:checked ~ .tab-content .pane-weapon,
+#tabChar:checked   ~ .tab-content .pane-char,
+#tabDef:checked    ~ .tab-content .pane-def {
+    display: flex;
+}
+
+/* ─── Секции внутри таба ─── */
+.stat-group {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-divider);
+}
+
+.stat-group:first-child {
+    padding-top: 0;
+    border-top: none;
+}
+
+.stat-section-title {
+    font-size: 0.85rem; /* было 0.66rem */
+    text-transform: uppercase;
+    letter-spacing: 1.4px;
+    color: var(--text-muted);
+    font-weight: 600;
+    padding-bottom: 4px;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.05rem; /* было 0.8rem */
+    line-height: 1.3;
+    padding: 4px 2px;
+    border-radius: var(--radius-xs);
+    transition: background 0.12s ease;
+}
+
+.stat-item:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.stat-item--wide {
+    padding-left: 2px;
+}
+
+.stat-item .icon {
+    width: 28px; /* было 22px */
+    text-align: center;
+    font-size: 1.15rem; /* было 0.88rem */
+    flex-shrink: 0;
+}
+
+.stat-item .label {
+    flex: 1;
+    color: var(--text-accent);
+    font-size: 1.05rem; /* было 0.78rem */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.stat-item .stat-value {
+    font-weight: 600;
+    text-align: right;
+    font-size: 1.05rem; /* было 0.8rem */
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+    min-width: 68px; /* было 52px */
+}
+
+.stat-item .stat-value.hp-value   { color: var(--colour-hp); }
+.stat-item .stat-value.fire-value  { color: #ff7a55; }
+.stat-item .stat-value.cold-value  { color: #66b0ff; }
+.stat-item .stat-value.light-value { color: #f5d24a; }
+
+.stat-item--wide > .stat-value.rarity-common {
+    flex: 1;
+    text-align: left;
+    min-width: 0;
+    font-weight: 700;
+    font-size: 1.2rem; /* было 0.92rem */
+}
+
+/* ================================================================
+   07. HUD: ВЕРХНЯЯ ПАНЕЛЬ (ВОЛНА)
+   ================================================================ */
+.game-top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-hud);
+    backdrop-filter: blur(8px);
+    border-radius: var(--radius-lg);
+    padding: 12px 24px;
+    border: 1px solid var(--border-hud);
+    flex-shrink: 0;
+}
+
+.game-top-bar .wave-info {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+}
+
+.game-top-bar .wave-info .wave-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-accent);
+    font-size: 1.15rem; /* было 0.9rem */
+}
+
+.game-top-bar .wave-info .wave-item .value {
+    font-weight: 700;
+    font-size: 1.3rem; /* было 1rem */
+}
+
+.game-top-bar .wave-info .wave-item .value.wave-value  { color: var(--colour-wave); }
+.game-top-bar .wave-info .wave-item .value.timer-value { color: var(--colour-timer); }
+.game-top-bar .wave-info .wave-item .value.enemy-value { color: var(--colour-enemy); }
+
+.game-top-bar .wave-info .wave-item .value.warning {
+    color: var(--colour-danger);
+    animation: blink 0.5s ease-in-out infinite alternate;
+}
+
+/* ================================================================
+   08. HUD: НИЖНЯЯ ПАНЕЛЬ (ОПЫТ)
+   ================================================================ */
+.game-bottom-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-hud);
+    backdrop-filter: blur(8px);
+    border-radius: var(--radius-lg);
+    padding: 10px 24px;
+    border: 1px solid var(--border-hud);
+    flex-shrink: 0;
+}
+
+.game-bottom-bar .xp-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+}
+
+.game-bottom-bar .xp-info .xp-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-accent);
+    font-size: 1.1rem; /* было 0.85rem */
+}
+
+.game-bottom-bar .xp-info .xp-item .value              { font-weight: 700; }
+.game-bottom-bar .xp-info .xp-item .value.level-value  { color: var(--colour-level); }
+.game-bottom-bar .xp-info .xp-item .value.xp-value     { color: var(--colour-xp); }
+
+.xp-bar-container {
+    flex: 1;
+    height: 8px; /* чуть толще */
+    background: var(--bg-body);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    min-width: 80px;
+}
+
+.xp-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #6a4a9a, var(--colour-xp));
+    border-radius: var(--radius-sm);
+    transition: width 0.3s ease;
+}
+
+/* ================================================================
+   09. ИГРОВОЕ ПОЛЕ
+   ================================================================ */
+#pixiCanvas {
+    width: 100%;
+    height: 100%;
+    min-height: 400px;
+    cursor: none;
+}
+
+/* ================================================================
+   10. УВЕДОМЛЕНИЕ О ВОЛНЕ
+   ================================================================ */
+#waveNotification {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--colour-wave);
+    font-size: 3.8rem; /* было 3rem */
+    font-weight: bold;
+    text-shadow: 0 0 30px rgba(255, 107, 255, 0.5);
+    pointer-events: none;
+    opacity: 0;
+    transition: all 0.5s ease;
+    z-index: 10;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 24px 48px;
+    border-radius: var(--radius-lg);
+    border: 2px solid rgba(255, 107, 255, 0.3);
+}
+
+#waveNotification.show {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.1);
+}
+
+#waveNotification .wave-sub {
+    font-size: 1.5rem; /* было 1.2rem */
+    color: var(--text-accent);
+    font-weight: normal;
+}
+
+/* ================================================================
+   11. ОВЕРЛЕИ (ОБЩИЕ)
+   ================================================================ */
+.overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(10, 8, 20, 0.85);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    justify-content: center;
+    align-items: center;
+}
+
+.overlay.active { display: flex; }
+
+.overlay-content {
+    background: rgba(30, 25, 50, 0.95);
+    border: 2px solid rgba(255, 85, 119, 0.3);
+    border-radius: 24px;
+    padding: 50px 60px;
+    text-align: center;
+    min-width: 320px;
+    box-shadow: 0 0 60px rgba(255, 85, 119, 0.15);
+}
+
+.overlay-blur {
+    position: absolute;
+    inset: 0;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 25;
+    pointer-events: none;
+    background: var(--bg-overlay);
+    backdrop-filter: blur(6px);
+}
+
+.overlay-blur.active { display: flex; pointer-events: auto; }
+
+/* ================================================================
+   12. ОВЕРЛЕЙ: ПОВЫШЕНИЕ УРОВНЯ
+   ================================================================ */
+#levelUpOverlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 25;
+    pointer-events: none;
+    background: var(--bg-overlay);
+    backdrop-filter: blur(6px);
+}
+
+#levelUpOverlay.active { display: flex; pointer-events: auto; }
+
+.level-up-box {
+    background: rgba(20, 26, 42, 0.96);
+    padding: 30px 35px;
+    border-radius: var(--radius-2xl);
+    border: 2px solid var(--colour-level);
+    box-shadow: 0 0 60px rgba(245, 197, 66, 0.25);
+    text-align: center;
+    backdrop-filter: blur(12px);
+}
+
+.level-up-box h2 {
+    color: var(--colour-level);
+    font-size: 2.4rem; /* было 1.8rem */
+    margin-bottom: 6px;
+    letter-spacing: 1px;
+}
+
+.level-up-box .sub {
+    color: var(--text-accent);
+    font-size: 1.3rem; /* было 1rem */
+    margin-bottom: 20px;
+    opacity: 0.8;
+}
+
+.bonus-cards {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+    perspective: 1000px;
+}
+
+.bonus-card {
+    width: 200px; /* чуть шире */
+    min-height: 260px;
+    background: linear-gradient(160deg, #1f1f35 0%, var(--bg-panel-dark) 100%);
+    border: 2px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-lg);
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+    text-align: center;
+}
+
+.bonus-card::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 140%;
+    height: 140%;
+    background: radial-gradient(circle, var(--glow) 0%, transparent 60%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.bonus-card:hover {
+    transform: translateY(-10px) scale(1.03);
+    border-color: var(--accent);
+    box-shadow: 0 0 25px var(--glow), 0 15px 30px rgba(0, 0, 0, 0.6);
+}
+
+.bonus-card:hover::before { opacity: 0.35; }
+.bonus-card:active { transform: translateY(-4px) scale(0.98); }
+
+.bonus-icon {
+    width: 72px; /* было 64px */
+    height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.35);
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 14px var(--glow), inset 0 0 14px var(--glow);
+    font-size: 34px; /* было 30px */
+    z-index: 1;
+    transition: transform 0.3s ease;
+}
+
+.bonus-card:hover .bonus-icon { transform: scale(1.1) rotate(-4deg); }
+
+.bonus-title {
+    font-size: 1.15rem; /* было 0.95rem */
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--accent);
+    z-index: 1;
+    text-shadow: 0 0 12px var(--glow);
+}
+
+.bonus-value {
+    font-size: 1.7rem; /* было 1.4rem */
+    font-weight: 800;
+    color: var(--text-on-dark);
+    z-index: 1;
+    text-shadow: 0 0 15px var(--glow);
+}
+
+.bonus-value small {
+    font-size: 0.9rem; /* было 0.75rem */
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.bonus-desc {
+    font-size: 0.85rem; /* было 0.72rem */
+    line-height: 1.4;
+    color: #a8a8c0;
+    z-index: 1;
+}
+
+.bonus-card.str  { --accent: #f87171; --glow: rgba(248, 113, 113, 0.6); }
+.bonus-card.dex  { --accent: #4ade80; --glow: rgba(74, 222, 128, 0.6); }
+.bonus-card.int  { --accent: #60a5fa; --glow: rgba(96, 165, 250, 0.6); }
+.bonus-card.hp   { --accent: #4ade80; --glow: rgba(74, 222, 128, 0.6); }
+.bonus-card.def  { --accent: #94a3b8; --glow: rgba(148, 163, 184, 0.6); }
+.bonus-card.res  { --accent: #22d3ee; --glow: rgba(34, 211, 238, 0.6); }
+.bonus-card.dmg  { --accent: #fbbf24; --glow: rgba(251, 191, 36, 0.6); }
+.bonus-card.fire { --accent: #ef4444; --glow: rgba(239, 68, 68, 0.6); }
+.bonus-card.cold { --accent: #38bdf8; --glow: rgba(56, 189, 248, 0.6); }
+.bonus-card.light{ --accent: #facc15; --glow: rgba(250, 204, 21, 0.6); }
+.bonus-card.spd  { --accent: #a78bfa; --glow: rgba(167, 139, 250, 0.6); }
+.bonus-card.crit { --accent: #fb7185; --glow: rgba(251, 113, 133, 0.6); }
+
+.bonus-card.keystone {
+    width: 220px; /* было 200px */
+    min-height: 300px;
+    border-width: 3px;
+    border-color: var(--accent);
+    background: linear-gradient(160deg, #2a1f3a 0%, #14141f 100%);
+    box-shadow: 0 0 30px var(--glow), inset 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.bonus-card.keystone::after {
+    content: '★';
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    font-size: 1.3rem; /* было 1.1rem */
+    color: var(--accent);
+    text-shadow: 0 0 12px var(--glow);
+    z-index: 2;
+}
+
+.bonus-card.keystone .bonus-icon  { width: 80px; height: 80px; font-size: 38px; border-width: 3px; }
+.bonus-card.keystone .bonus-title { font-size: 1.2rem; letter-spacing: 1.5px; }
+.bonus-card.keystone:hover {
+    transform: translateY(-12px) scale(1.05);
+    box-shadow: 0 0 40px var(--glow), 0 20px 40px rgba(0, 0, 0, 0.7);
+}
+
+.bonus-value.secondary {
+    font-size: 1.2rem; /* было 1rem */
+    font-weight: 600;
+    color: #ff8888;
+    text-shadow: 0 0 10px rgba(255, 100, 100, 0.4);
+}
+
+/* ================================================================
+   13. ОВЕРЛЕЙ: ВЫБОР ДОБЫЧИ
+   ================================================================ */
+#lootChoiceOverlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 25;
+    pointer-events: none;
+    background: var(--bg-overlay);
+    backdrop-filter: blur(6px);
+}
+
+#lootChoiceOverlay.active { display: flex; pointer-events: auto; }
+
+.loot-choice-box {
+    position: absolute;
+    display: grid;
+    background: rgba(15, 18, 30, 0.97);
+    padding: 30px 35px 35px;
+    border-radius: 12px;
+    border: 2px solid #3a4a6a;
+    box-shadow: 0 0 80px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    text-align: center;
+    max-width: 850px; /* чуть шире */
+    width: 95%;
+    max-height: 800px;
+}
+
+.loot-choice-items {
+    max-height: 600px;
+    overflow-y: auto;
+    padding-right: 15px;
+}
+
+.loot-choice-items::-webkit-scrollbar        { width: 6px; }
+.loot-choice-items::-webkit-scrollbar-track  { background: var(--bg-panel-darker); border-radius: 0; }
+.loot-choice-items::-webkit-scrollbar-thumb  { background: #3a4a6a; border-radius: var(--radius-xs); }
+
+.loot-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 4px;
+}
+
+.loot-header h2 {
+    color: #c8a86a;
+    font-size: 1.6rem; /* было 1.3rem */
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-shadow: 0 0 30px rgba(200, 168, 106, 0.15);
+    font-family: 'Georgia', serif;
+    white-space: nowrap;
+}
+
+.loot-header-line {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #4a5a7a, transparent);
+}
+
+.loot-sub {
+    color: var(--text-soft);
+    font-size: 1rem; /* было 0.85rem */
+    margin-bottom: 16px;
+    opacity: 0.7;
+    letter-spacing: 1px;
+}
+
+.loot-close-btn {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid #3a4a6a;
+    border-radius: 50%;
+    width: 40px; /* было 36px */
+    height: 40px;
+    color: var(--text-soft);
+    font-size: 1.4rem; /* было 1.2rem */
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    padding: 0;
+}
+
+.loot-close-btn:hover {
+    background: rgba(255, 68, 68, 0.15);
+    border-color: #ff5577;
+    color: #ff5577;
+    transform: scale(1.05);
+    box-shadow: 0 0 20px rgba(255, 68, 68, 0.1);
+}
+
+.loot-choice-btn {
+    background: rgba(20, 26, 42, 0.9);
+    border: 1px solid #2a3a5a;
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    font-size: 1.1rem; /* было 0.95rem */
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: stretch;
+    gap: 16px;
+    width: 100%;
+    text-align: left;
+    position: relative;
+    margin-bottom: 10px;
+}
+
+.loot-choice-btn:hover {
+    background: rgba(30, 40, 60, 0.95);
+    border-color: #5a7a9a;
+    transform: translateX(4px);
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.4);
+}
+
+.loot-choice-btn .loot-icon {
+    font-size: 2.4rem; /* было 2rem */
+    min-width: 52px;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.loot-choice-btn .loot-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.loot-choice-btn .loot-name {
+    font-size: 1.25rem; /* было 1.05rem */
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.loot-choice-btn .loot-item-type {
+    font-size: 0.85rem; /* было 0.7rem */
+    font-weight: 400;
+    color: var(--text-muted);
+    background: rgba(255, 255, 255, 0.05);
+    padding: 0 8px;
+    border-radius: var(--radius-xs);
+}
+
+.loot-choice-btn .loot-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    font-size: 0.85rem; /* было 0.7rem */
+    color: var(--text-muted);
+    margin-bottom: 2px;
+}
+
+.loot-level, .loot-slot, .loot-requirements { color: #556688; }
+
+.stats-group {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 2px 0;
+}
+
+.stats-group.base-stats  { margin-top: 2px; }
+.stats-group.affix-stats { margin-top: 2px; }
+
+.stat-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 1rem; /* было 0.8rem */
+    padding: 2px 4px;
+    border-radius: var(--radius-xs);
+}
+
+.stat-line .stat-icon  { width: 22px; text-align: center; font-size: 0.9rem; opacity: 0.7; }
+.stat-line .stat-label { color: var(--text-soft); font-size: 0.95rem; flex: 1; }
+.stat-line .stat-value {
+    color: var(--value-default);
+    font-weight: 500;
+    font-size: 1rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.stat-line.removed {
+    opacity: 0.5;
+    filter: grayscale(0.4);
+}
+
+.stat-line.removed .stat-label,
+.stat-line.removed .stat-value {
+    color: var(--text-muted);
+}
+
+.stat-line.removed .stat-compare.worse {
+    color: var(--colour-worse);
+    font-weight: 700;
+    opacity: 1;
+}
+
+.stat-line .changed-value { color: var(--value-changed); }
+.stat-line .fire-value    { color: var(--value-fire); }
+.stat-line .cold-value    { color: var(--value-cold); }
+.stat-line .light-value   { color: var(--value-light); }
+
+.stat-line .stat-compare          { min-width: 48px; text-align: right; }
+.stat-line .stat-compare.better   { color: var(--colour-success); }
+.stat-line .stat-compare.worse    { color: var(--colour-worse); }
+.stat-line .stat-compare.equal    { color: var(--text-muted); }
+.stat-line .stat-compare.replaced { color: #ffaa44; }
+
+.stat-line.affix .stat-label,
+.stat-line.affix .stat-value { color: var(--affix-explicit); }
+
+.stat-line.affix-unsupport .stat-label { color: var(--affix-explicit-unsupport); }
+
+.stat-line.affix.implicit .stat-label { color: #6a5a8a; font-style: italic; }
+.stat-line.affix.implicit .stat-value { color: #9a7aba; font-style: italic; }
+
+.stat-line.unique-mod .stat-label { color: #c8a86a; font-weight: 600; }
+.stat-line.unique-mod .stat-value { color: #f5d78a; font-style: italic; }
+
+.stats-group.accessory-info .stat-line .stat-label { color: var(--text-muted); }
+.stats-group.accessory-info .stat-line .stat-value { color: var(--text-soft); }
+
+.stats-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #2a3a5a, #3a4a6a, #2a3a5a, transparent);
+    margin: 4px 0;
+    opacity: 0.5;
+}
+
+.loot-compare {
+    display: flex;
+    gap: 12px;
+    margin-top: 3px;
+    padding: 0 4px;
+    font-size: 0.95rem; /* было 0.8rem */
+}
+
+.loot-compare .better { color: var(--colour-success); }
+.loot-compare .worse  { color: var(--colour-worse); }
+.loot-compare .equal  { color: var(--text-soft); }
+
+/* ================================================================
+   14. ОВЕРЛЕЙ: ПОРАЖЕНИЕ
+   ================================================================ */
+.game-over-title {
+    font-size: 3.8rem; /* было 48px */
+    font-weight: bold;
+    color: #ff5577;
+    margin-bottom: 20px;
+    text-shadow: 0 0 30px rgba(255, 85, 119, 0.4);
+}
+
+.game-over-stats {
+    color: #b7c7e0;
+    font-size: 1.6rem; /* было 20px */
+    margin: 20px 0;
+}
+
+.game-over-stats p { margin: 8px 0; }
+.game-over-stats span { color: var(--text-on-dark); font-weight: bold; }
+
+.btn-restart {
+    background: rgba(255, 85, 119, 0.15);
+    border: 2px solid #ff5577;
+    color: #ff5577;
+    padding: 16px 44px;
+    border-radius: var(--radius-lg);
+    font-size: 1.4rem; /* было 18px */
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-top: 15px;
+}
+
+.btn-restart:hover {
+    background: rgba(255, 85, 119, 0.25);
+    transform: scale(1.02);
+    box-shadow: 0 0 30px rgba(255, 85, 119, 0.2);
+}
+
+/* ================================================================
+   15. ОВЕРЛЕЙ: ОШИБКА
+   ================================================================ */
+#errorOverlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(30, 10, 10, 0.9);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+    padding: 20px;
+    backdrop-filter: blur(4px);
+}
+
+#errorOverlay.active { display: flex; }
+
+.error-box {
+    background: #1a0a0a;
+    padding: 30px 35px;
+    border-radius: var(--radius-2xl);
+    border: 2px solid var(--colour-danger);
+    box-shadow: 0 0 60px rgba(255, 68, 68, 0.25);
+    text-align: center;
+    max-width: 600px;
+    width: 90%;
+}
+
+.error-box h2 {
+    color: var(--colour-danger);
+    font-size: 2.2rem; /* было 1.8rem */
+    margin-bottom: 6px;
+    letter-spacing: 1px;
+}
+
+.error-box .error-msg {
+    color: #ffaaaa;
+    font-size: 1.1rem; /* было 1rem */
+    margin: 16px 0;
+    padding: 16px;
+    background: #2a1010;
+    border-radius: 12px;
+    font-family: monospace;
+    text-align: left;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.error-box .error-help {
+    color: var(--text-accent);
+    font-size: 1rem; /* было 0.9rem */
+    margin-bottom: 16px;
+    opacity: 0.8;
+}
+
+.error-box .btn-restart {
+    background: #3a2a2a;
+    border-color: var(--colour-danger);
+    color: #ffaaaa;
+}
+
+.error-box .btn-restart:hover {
+    background: #4a3a3a;
+    border-color: #ff6666;
+}
+
+/* ================================================================
+   16. ОВЕРЛЕЙ: ПАУЗА
+   ================================================================ */
+.pause-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 15;
+    display: none;
+    pointer-events: none;
+}
+
+.pause-overlay.active { display: block; }
+
+/* ================================================================
+   17. АДАПТИВНОСТЬ
+   ================================================================ */
+@media (max-width: 1200px) {
+    .stats-panel { flex: 0 0 380px; padding: 16px 14px; }
+}
+
+@media (max-width: 1024px) {
+    .stats-panel { flex: 0 0 340px; padding: 14px 12px; }
+}
+
+@media (max-width: 768px) {
+    .app-layout { flex-direction: column-reverse; }
+    .stats-panel {
+        flex: none;
+        width: 100%;
+        padding: 14px;
+    }
+    .tab-content { min-height: 300px; }
+
+    .game-wrapper { width: 100%; }
+    .game-top-bar { flex-wrap: wrap; gap: 6px; padding: 10px 16px; }
+    .game-top-bar .wave-info { flex-wrap: wrap; gap: 12px; }
+    .game-bottom-bar { padding: 8px 16px; }
+    .game-bottom-bar .xp-info { flex-wrap: wrap; gap: 10px; }
+    #waveNotification { font-size: 2.6rem; padding: 18px 36px; }
+
+    .bonus-cards { gap: 10px; }
+    .bonus-card { width: 160px; min-height: 220px; padding: 14px 12px; }
+    .bonus-icon { width: 56px; height: 56px; font-size: 28px; }
+    .bonus-title { font-size: 0.95rem; }
+    .bonus-value { font-size: 1.3rem; }
+    .bonus-desc { font-size: 0.75rem; }
+
+    .loot-choice-box { padding: 20px; max-width: 100%; }
+    .loot-header h2 { font-size: 1.2rem; letter-spacing: 1px; }
+    .loot-choice-btn { flex-wrap: wrap; padding: 14px 16px; }
+    .loot-choice-btn .loot-icon { font-size: 1.8rem; min-width: 38px; }
+    .loot-choice-btn .loot-name { font-size: 1.05rem; }
+    .loot-compare { min-width: 40px; font-size: 0.75rem; padding: 0 6px; }
+    .loot-close-btn { top: 8px; right: 10px; width: 34px; height: 34px; font-size: 1.1rem; }
+}
+
+    </style>
+</head>
+
+<body>
+    <div class="app-layout">
+
+        <!-- =========================================================
+             ПАНЕЛЬ СТАТОВ — 3 таба
+             ========================================================= -->
+        <div class="stats-panel" id="statsPanel">
+
+            <!-- Скрытые радио для управления табами -->
+            <input type="radio" name="statTab" id="tabWeapon" class="tab-input" checked>
+            <input type="radio" name="statTab" id="tabChar"   class="tab-input">
+            <input type="radio" name="statTab" id="tabDef"    class="tab-input">
+
+            <!-- Кнопки-табы -->
+            <div class="tab-bar">
+                <label for="tabWeapon" class="tab-btn">
+                    <span class="tab-icon">⚔️</span>
+                    <span class="tab-name">Урон</span>
+                </label>
+                <label for="tabChar" class="tab-btn">
+                    <span class="tab-icon">❤️</span>
+                    <span class="tab-name">Персонаж</span>
+                </label>
+                <label for="tabDef" class="tab-btn">
+                    <span class="tab-icon">🛡️</span>
+                    <span class="tab-name">Защита</span>
+                </label>
+            </div>
+
+            <!-- Содержимое табов -->
+            <div class="tab-content">
+
+                <!-- ===================== ТАБ 1: ОРУЖИЕ / УРОН ===================== -->
+                <div class="tab-pane pane-weapon">
+
+                    <div class="stat-group">
+                        <div class="stat-section-title">Оружие</div>
+                        <div class="stat-item stat-item--wide">
+                            <span class="icon">⚔️</span>
+                            <span class="stat-value rarity-common" id="weaponNameDisplay">Без оружия</span>
+                        </div>
+                    </div>
+
+                    <div class="stat-group">
+                        <div class="stat-section-title">Урон</div>
+                        <div class="stat-item"><span class="icon">👊</span><span class="label">Физ. урон</span><span class="stat-value" id="statPhysDmg">0-0</span></div>
+                        <div class="stat-item"><span class="icon">🔥</span><span class="label">Огн. урон</span><span class="stat-value fire-value" id="statFireDmg">0-0</span></div>
+                        <div class="stat-item"><span class="icon">❄️</span><span class="label">Хол. урон</span><span class="stat-value cold-value" id="statColdDmg">0-0</span></div>
+                        <div class="stat-item"><span class="icon">⚡</span><span class="label">Молн. урон</span><span class="stat-value light-value" id="statLightDmg">0-0</span></div>
+                    </div>
+
+                    <div class="stat-group">
+                        <div class="stat-section-title">Атака</div>
+                        <div class="stat-item"><span class="icon">💨</span><span class="label">Скорость атаки</span><span class="stat-value" id="statAttackSpeed">0</span></div>
+                        <div class="stat-item"><span class="icon">⭕</span><span class="label">Радиус атаки</span><span class="stat-value" id="statAttackRange">0</span></div>
+                        <div class="stat-item"><span class="icon">🎯</span><span class="label">Меткость</span><span class="stat-value" id="statAccuracy">0</span></div>
+                        <div class="stat-item"><span class="icon">💥</span><span class="label">Крит. шанс</span><span class="stat-value" id="statCritChance">0%</span></div>
+                        <div class="stat-item"><span class="icon">✖️</span><span class="label">Крит. множитель</span><span class="stat-value" id="statCritMult">1.5x</span></div>
+                        <div class="stat-item"><span class="icon">💫</span><span class="label">Оглушение</span><span class="stat-value" id="statStunInc">0%</span></div>
+                    </div>
+
+                </div>
+
+                <!-- ===================== ТАБ 2: ПЕРСОНАЖ ===================== -->
+                <div class="tab-pane pane-char">
+
+                    <div class="stat-group">
+                        <div class="stat-section-title">Жизнь</div>
+                        <div class="stat-item"><span class="icon">❤️</span><span class="label">Здоровье</span><span class="stat-value hp-value" id="hpText">0/0</span></div>
+                        <div class="stat-item"><span class="icon">💚</span><span class="label">Регенерация</span><span class="stat-value" id="statRegen">0</span></div>
+                        <div class="stat-item"><span class="icon">💜</span><span class="label">За убийство</span><span class="stat-value" id="statLifePerKill">0</span></div>
+                    </div>
+
+                    <div class="stat-group">
+                        <div class="stat-section-title">Характеристики</div>
+                        <div class="stat-item"><span class="icon">💪</span><span class="label">Сила</span><span class="stat-value" id="statStr">0</span></div>
+                        <div class="stat-item"><span class="icon">🤸</span><span class="label">Ловкость</span><span class="stat-value" id="statDex">0</span></div>
+                        <div class="stat-item"><span class="icon">🧠</span><span class="label">Интеллект</span><span class="stat-value" id="statInt">0</span></div>
+                    </div>
+
+                    <div class="stat-group">
+                        <div class="stat-section-title">Передвижение</div>
+                        <div class="stat-item"><span class="icon">🏃</span><span class="label">Скорость</span><span class="stat-value" id="statSpeed">0</span></div>
+                    </div>
+
+                </div>
+
+                <!-- ===================== ТАБ 3: ЗАЩИТА ===================== -->
+                <div class="tab-pane pane-def">
+
+                    <div class="stat-group">
+                        <div class="stat-section-title">Защита</div>
+                        <div class="stat-item"><span class="icon">🔮</span><span class="label">Энергощит</span><span class="stat-value" id="statES">0</span></div>
+                        <div class="stat-item"><span class="icon">🌪️</span><span class="label">Уклонение</span><span class="stat-value" id="statEvasion">0</span></div>
+                        <div class="stat-item"><span class="icon">🛡️</span><span class="label">Броня</span><span class="stat-value" id="statArmor">0</span></div>
+                        <div class="stat-item"><span class="icon">🛡️</span><span class="label">Физ. снижение</span><span class="stat-value" id="statPhysReduction">0%</span></div>
+                        <div class="stat-item"><span class="icon">🛡️</span><span class="label">Блок</span><span class="stat-value" id="statBlock">0%</span></div>
+                        <div class="stat-item"><span class="icon">🦔</span><span class="label">Отражение урона</span><span class="stat-value" id="statReflect">0</span></div>
+                        <div class="stat-item"><span class="icon">🌀</span><span class="label">Сопр. оглуш.</span><span class="stat-value" id="statStunReduction">0%</span></div>
+                    </div>
+
+                    <div class="stat-group">
+                        <div class="stat-section-title">Сопротивления</div>
+                        <div class="stat-item"><span class="icon">🔥</span><span class="label">Сопр. огню</span><span class="stat-value" id="statFireRes">0%</span></div>
+                        <div class="stat-item"><span class="icon">❄️</span><span class="label">Сопр. холоду</span><span class="stat-value" id="statColdRes">0%</span></div>
+                        <div class="stat-item"><span class="icon">⚡</span><span class="label">Сопр. молнии</span><span class="stat-value" id="statLightRes">0%</span></div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ===== ИГРОВОЙ КОНТЕЙНЕР ===== -->
+        <div class="game-wrapper">
+            <!-- ВЕРХНЯЯ ПАНЕЛЬ (ВОЛНА) -->
+            <div class="game-top-bar">
+                <div class="wave-info">
+                    <div class="wave-item">
+                        <span>⏱️</span>
+                        <span>До конца:</span>
+                        <span class="value timer-value" id="statWaveTimer">0с</span>
+                    </div>
+                    <div class="wave-item">
+                        <span>🌊</span>
+                        <span>Волна:</span>
+                        <span class="value wave-value" id="statWave">1</span>
+                    </div>
+                    <div class="wave-item">
+                        <span>👾</span>
+                        <span>Врагов:</span>
+                        <span class="value enemy-value" id="statEnemiesLeft">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ИГРОВОЕ ПОЛЕ -->
+            <div class="game-canvas-container">
+                <div id="pixiCanvas" style="cursor: none;"></div>
+
+                <!-- WAVE NOTIFICATION -->
+                <div id="waveNotification">
+                    <div>🌊 ВОЛНА <span id="waveNumber">1</span></div>
+                    <div class="wave-sub" id="waveSub">Приготовьтесь!</div>
+                </div>
+
+                <!-- PAUSE OVERLAY -->
+                <div class="pause-overlay" id="pauseOverlay"></div>
+
+                <!-- LEVEL UP OVERLAY -->
+                <div id="levelUpOverlay">
+                    <div class="level-up-box">
+                        <h2>⬆ УРОВЕНЬ ПОВЫШЕН!</h2>
+                        <div class="sub">Выберите бонус</div>
+
+                        <div class="bonus-cards">
+                            <div class="bonus-card hp">
+                                <div class="bonus-icon">❤️</div>
+                                <div class="bonus-title">Здоровье</div>
+                                <div class="bonus-value">+25 <small>HP</small></div>
+                                <div class="bonus-desc">Увеличивает максимальный запас здоровья</div>
+                            </div>
+
+                            <div class="bonus-card str">
+                                <div class="bonus-icon">💪</div>
+                                <div class="bonus-title">Сила</div>
+                                <div class="bonus-value">+5 <small>STR</small></div>
+                                <div class="bonus-desc">Повышает силу атаки и пробитие брони</div>
+                            </div>
+
+                            <div class="bonus-card dmg">
+                                <div class="bonus-icon">⚔️</div>
+                                <div class="bonus-title">Физ. урон</div>
+                                <div class="bonus-value">+10% <small>DMG</small></div>
+                                <div class="bonus-desc">Увеличивает весь физический урон</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- LOOT CHOICE OVERLAY -->
+                <div id="lootChoiceOverlay">
+                    <div class="loot-choice-box">
+                        <button class="loot-close-btn" id="lootCloseBtn" title="Закрыть">✕</button>
+                        <div class="loot-header">
+                            <div class="loot-header-line"></div>
+                            <h2>✦ ВЫБЕРИТЕ ДОБЫЧУ ✦</h2>
+                            <div class="loot-header-line"></div>
+                        </div>
+                        <div class="loot-sub">Нажмите на предмет, чтобы экипировать</div>
+                        <div class="loot-choice-items" id="lootChoiceItems"></div>
+                    </div>
+                </div>
+
+                <!-- GAME OVER OVERLAY -->
+                <div id="gameOverOverlay" class="overlay">
+                    <div class="overlay-content game-over-content">
+                        <h1 class="game-over-title">💀 ПОРАЖЕНИЕ</h1>
+                        <div class="game-over-stats">
+                            <p>Волна: <span id="gameOverWave">0</span></p>
+                            <p>Уровень: <span id="gameOverLevel">1</span></p>
+                        </div>
+                        <button id="gameOverRestartBtn" class="btn-restart">🔄 Перезапустить</button>
+                    </div>
+                </div>
+
+                <!-- ERROR OVERLAY -->
+                <div id="errorOverlay">
+                    <div class="error-box">
+                        <h2>❌ КРИТИЧЕСКАЯ ОШИБКА</h2>
+                        <div class="error-msg" id="errorMessage">Неизвестная ошибка</div>
+                        <div class="error-help">Пожалуйста, сообщите об ошибке разработчику</div>
+                        <button class="btn-restart" id="errorRestartBtn">🔄 Перезапустить игру</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- НИЖНЯЯ ПАНЕЛЬ (ОПЫТ) -->
+            <div class="game-bottom-bar">
+                <div class="xp-info">
+                    <div class="xp-item">
+                        <span>🏆</span>
+                        <span>Уровень:</span>
+                        <span class="value level-value" id="statLevel">1</span>
+                    </div>
+                    <div class="xp-bar-container">
+                        <div class="xp-bar-fill" id="xpBarFill" style="width: 0%;"></div>
+                    </div>
+                    <div class="xp-item">
+                        <span>⭐</span>
+                        <span class="value xp-value" id="xpText">0 / 100</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js"></script>
+    <script src="app.js"></script>
+
+    <!-- Запоминание активного таба -->
+    <script>
+    (function () {
+        const TABS = ["tabWeapon", "tabChar", "tabDef"];
+        const STORAGE_KEY = "arpg.statTab";
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (TABS.includes(saved)) {
+            const el = document.getElementById(saved);
+            if (el) el.checked = true;
+        }
+        TABS.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener("change", () => {
+                    if (el.checked) localStorage.setItem(STORAGE_KEY, id);
+                });
+            }
+        });
+    })();
+    </script>
+</body>
+
+</html>

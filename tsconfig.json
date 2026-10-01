@@ -1,0 +1,14 @@
+{
+    "compilerOptions": {
+        "target": "ESNext",
+        "module": "ESNext",
+        "strict": false,                    // ← строгие проверки
+        "noImplicitAny": true,             // ← неявный any
+        "strictNullChecks": true,          // ← проверка null/undefined
+        "moduleResolution": "bundler",
+        "esModuleInterop": true,
+        "resolveJsonModule": true,
+        "skipLibCheck": true               // ← пропускает проверку библиотек
+        //"types": ["@types/wicg-file-system-access", "chrome"]
+    }
+}

@@ -1,0 +1,6 @@
+{
+    "compile-hero.disable-compile-files-on-did-save-code": true,
+    "explorer.fileNesting.enabled":true,
+    "js/ts.referencesCodeLens.enabled": true
+    
+}

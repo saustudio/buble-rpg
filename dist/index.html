@@ -1,0 +1,1807 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ARPG sauwork</title>
+    <style>
+        /* ================================================================
+   ARPG на PixiJS — фикс цветов + высота окон по содержимому
+   ================================================================ */
+
+        :root {
+            --bg-body: #1a1e2c;
+            --bg-panel: #232837;
+            --bg-panel-dark: #14141f;
+            --bg-panel-darker: #0a0d1a;
+            --bg-hud: rgba(35, 56, 55, 0.8);
+            --bg-overlay: rgba(0, 0, 0, 0.6);
+
+            --border-panel: #3e4b66;
+            --border-divider: #2a3450;
+            --border-hud: #3e4b66;
+
+            --text-primary: #d6e2f0;
+            --text-muted: #667799;
+            --text-soft: #8899bb;
+            --text-accent: #b7cdff;
+            --text-on-dark: #ffffff;
+
+            --rarity-normal: rgb(200, 200, 200);
+            --rarity-magic: rgb(136, 136, 255);
+            --rarity-rare: rgb(255, 255, 119);
+            --rarity-unique: rgb(175, 96, 37);
+            --rarity-legendary: #ff6f00;
+
+            --rarity-bg-normal: rgba(144, 144, 144, 0.15);
+            --rarity-bg-magic: rgba(76, 175, 80, 0.15);
+            --rarity-bg-rare: rgba(33, 150, 243, 0.15);
+            --rarity-bg-legendary: rgba(255, 111, 0, 0.15);
+            --rarity-bg-unique: rgba(255, 215, 0, 0.15);
+
+            --affix-explicit: #88f;
+            --affix-explicit-unsupport: red;
+
+            --value-changed: #88f;
+            --value-default: #ffffff;
+            --value-fire: rgb(150, 0, 0);
+            --value-cold: rgb(54, 100, 146);
+            --value-light: rgb(255, 215, 0);
+
+            --colour-hp: #ff7a7a;
+            --colour-xp: #c3adff;
+            --colour-level: #f5c542;
+            --colour-wave: #ff6bff;
+            --colour-timer: #44ddff;
+            --colour-enemy: #ff7a7a;
+            --colour-danger: #ff4444;
+            --colour-success: #44dd88;
+            --colour-worse: #ff6644;
+
+            --radius-xs: 3px;
+            --radius-sm: 4px;
+            --radius-md: 8px;
+            --radius-lg: 16px;
+            --radius-xl: 20px;
+            --radius-2xl: 28px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: var(--bg-body);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 20px;
+            padding: 20px;
+            color: #d6e2f0;
+        }
+
+        button {
+            font-family: inherit;
+        }
+
+        /* ─── Утилиты редкости ─── */
+        .rarity-common {
+            color: rgb(200, 200, 200);
+        }
+
+        .rarity-magic {
+            color: rgb(136, 136, 255);
+        }
+
+        .rarity-rare {
+            color: rgb(255, 255, 119);
+        }
+
+        .rarity-legendary {
+            color: #ff6f00;
+        }
+
+        .rarity-unique {
+            color: rgb(175, 96, 37);
+        }
+
+        .rarity-tag-common,
+        .rarity-tag-magic,
+        .rarity-tag-rare,
+        .rarity-tag-legendary,
+        .rarity-tag-unique {
+            font-weight: 600;
+            padding: 0 8px;
+            border-radius: var(--radius-xs);
+            font-size: 0.7rem;
+            letter-spacing: 0.5px;
+        }
+
+        .rarity-tag-common {
+            color: var(--rarity-normal);
+            background: var(--rarity-bg-normal);
+        }
+
+        .rarity-tag-magic {
+            color: var(--rarity-magic);
+            background: var(--rarity-bg-magic);
+        }
+
+        .rarity-tag-rare {
+            color: var(--rarity-rare);
+            background: var(--rarity-bg-rare);
+        }
+
+        .rarity-tag-legendary {
+            color: var(--rarity-legendary);
+            background: var(--rarity-bg-legendary);
+        }
+
+        .rarity-tag-unique {
+            color: var(--rarity-unique);
+            background: var(--rarity-bg-unique);
+        }
+
+        /* ─── Анимации ─── */
+        @keyframes blink {
+            from {
+                opacity: 1;
+            }
+
+            to {
+                opacity: 0.3;
+            }
+        }
+
+        @keyframes lootPulse {
+            from {
+                opacity: 0.6;
+                transform: scale(0.9);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1.1);
+            }
+        }
+
+        @keyframes paneFade {
+            from {
+                opacity: 0;
+                transform: translateY(3px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes overlayFade {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes boxPop {
+            from {
+                opacity: 0;
+                transform: scale(0.94);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        /* ================================================================
+   LAYOUT ПРИЛОЖЕНИЯ
+   ================================================================ */
+        .app-layout {
+            display: flex;
+            gap: 24px;
+            align-items: flex-start;
+            justify-content: center;
+        }
+
+        .game-wrapper {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex: 0 0 auto;
+            width: var(--canvas-w, auto);
+            max-width: 100%;
+        }
+
+        .game-canvas-container {
+            position: relative;
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+            width: var(--canvas-w, 1000px);
+            height: var(--canvas-h, 800px);
+            max-width: 100%;
+            aspect-ratio: var(--canvas-ar, auto);
+        }
+
+        /* ================================================================
+   СТОЛБИК КНОПОК-ИКОНОК
+   ================================================================ */
+        .stat-nav {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex-shrink: 0;
+            align-self: flex-start;
+            position: sticky;
+            top: 20px;
+            z-index: 5;
+        }
+
+        .stat-nav-btn {
+            width: 56px;
+            height: 56px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            padding: 0;
+            border: 1px solid var(--border-divider);
+            background: rgba(20, 26, 42, 0.85);
+            backdrop-filter: blur(6px);
+            color: var(--text-muted);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition:
+                background 0.15s ease,
+                color 0.15s ease,
+                border-color 0.15s ease,
+                transform 0.12s ease,
+                box-shadow 0.15s ease;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            position: relative;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+        }
+
+        .stat-nav-btn:hover {
+            background: rgba(30, 40, 60, 0.95);
+            border-color: #5a7a9a;
+            color: var(--text-accent);
+            transform: translateX(3px);
+        }
+
+        .stat-nav-btn.active {
+            background: rgba(30, 42, 66, 0.98);
+            border-color: var(--text-accent);
+            color: var(--text-accent);
+            box-shadow:
+                0 0 14px rgba(183, 205, 255, 0.25),
+                0 2px 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .stat-nav-btn.active::before {
+            content: '';
+            position: absolute;
+            left: -6px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 3px;
+            height: 60%;
+            background: var(--text-accent);
+            border-radius: 2px;
+            box-shadow: 0 0 8px var(--text-accent);
+        }
+
+        .stat-nav-btn .nav-icon {
+            font-size: 1.5rem;
+            line-height: 1;
+        }
+
+        .stat-nav-btn .nav-label {
+            font-size: 0.55rem;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+            line-height: 1;
+        }
+
+        /* ================================================================
+   ЕДИНЫЙ ОВЕРЛЕЙ ДИАЛОГОВ
+   ================================================================ */
+        .ui-dialog-overlay {
+            position: absolute;
+            inset: 0;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 30;
+            pointer-events: none;
+            background: var(--bg-overlay);
+            backdrop-filter: blur(6px);
+            animation: overlayFade 0.18s ease;
+        }
+
+        .ui-dialog-overlay.is-open {
+            display: flex;
+            pointer-events: auto;
+        }
+
+        /* ─── ЕДИНОЕ ОКНО ─── */
+        .ui-dialog {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            background: rgba(15, 18, 30, 0.97);
+            color: #d6e2f0;
+            padding: 25px 30px 30px;
+            border-radius: 12px;
+            border: 2px solid #3a4a6a;
+            box-shadow: 0 0 80px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            animation: boxPop 0.2s ease;
+            overflow: hidden;
+
+            width: min(var(--dialog-w, 750px), 90%);
+            height: auto;
+            max-height: 90%;
+        }
+
+        .ui-dialog[data-size="sm"] {
+            --dialog-w: 460px;
+        }
+
+        .ui-dialog[data-size="md"] {
+            --dialog-w: 620px;
+        }
+
+        .ui-dialog[data-size="lg"] {
+            --dialog-w: 750px;
+        }
+
+        .ui-dialog[data-variant="danger"] {
+            border-color: #ff4444;
+            box-shadow: 0 0 60px rgba(255, 68, 68, 0.25);
+        }
+
+        .ui-dialog[data-variant="danger"] .ui-dialog-title {
+            color: #ff5577;
+        }
+
+        /* ─── ШАПКА ─── */
+        .ui-dialog-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 4px;
+            flex-shrink: 0;
+        }
+
+        .ui-dialog-header .ui-dialog-line {
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #4a5a7a, transparent);
+        }
+
+        .ui-dialog-title {
+            color: #c8a86a;
+            font-size: 1.3rem;
+            font-weight: 700;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            font-family: 'Georgia', serif;
+            white-space: nowrap;
+            text-shadow: 0 0 30px rgba(200, 168, 106, 0.15);
+        }
+
+        .ui-dialog-sub {
+            color: #8899bb;
+            font-size: 0.85rem;
+            margin-bottom: 16px;
+            opacity: 0.7;
+            letter-spacing: 1px;
+            flex-shrink: 0;
+        }
+
+        /* ─── КРЕСТИК ─── */
+        .ui-dialog-close {
+            position: absolute;
+            top: 12px;
+            right: 16px;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid #3a4a6a;
+            border-radius: 50%;
+            color: #8899bb;
+            font-size: 1.2rem;
+            line-height: 1;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            z-index: 2;
+        }
+
+        .ui-dialog-close:hover {
+            background: rgba(255, 68, 68, 0.15);
+            border-color: #ff5577;
+            color: #ff5577;
+            transform: scale(1.05);
+            box-shadow: 0 0 20px rgba(255, 68, 68, 0.1);
+        }
+
+        /* ─── ТЕЛО ─── */
+        .ui-dialog-body {
+            overflow-y: auto;
+            padding-right: 15px;
+            text-align: left;
+            flex: 0 1 auto;
+            min-height: 0;
+            max-height: 100%;
+            color: #d6e2f0;
+        }
+
+        .ui-dialog-body::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .ui-dialog-body::-webkit-scrollbar-track {
+            background: #0a0d1a;
+            border-radius: 0;
+        }
+
+        .ui-dialog-body::-webkit-scrollbar-thumb {
+            background: #3a4a6a;
+            border-radius: 3px;
+        }
+
+        /* ================================================================
+   ВНУТРЕННИЕ ГРУППЫ ДИАЛОГА
+   ================================================================ */
+        .stat-group {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            padding-top: 8px;
+            border-top: 1px solid #2a3450;
+        }
+
+        .stat-group:first-child {
+            padding-top: 0;
+            border-top: none;
+        }
+
+        .stat-section-title {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1.4px;
+            color: #667799;
+            font-weight: 600;
+            padding-bottom: 4px;
+        }
+
+        /* ================================================================
+   СТРОКИ СТАТОВ — ФИКС ЦВЕТОВ
+   ================================================================ */
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1rem;
+            line-height: 1.3;
+            padding: 4px 2px;
+            border-radius: 3px;
+            transition: background 0.12s ease;
+            color: #ffffff;
+        }
+
+        .stat-item:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .stat-item--wide {
+            padding-left: 2px;
+        }
+
+        .stat-item .icon {
+            width: 28px;
+            text-align: center;
+            font-size: 1.15rem;
+            flex-shrink: 0;
+            color: #d6e2f0;
+        }
+
+        .stat-item .label {
+            flex: 1;
+            color: #b7cdff;
+            font-size: 1rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-width: 0;
+        }
+
+        .stat-item .stat-value {
+            font-weight: 600;
+            text-align: right;
+            font-size: 1rem;
+            font-variant-numeric: tabular-nums;
+            flex-shrink: 0;
+            min-width: 68px;
+            color: #ffffff;
+        }
+
+        .stat-item .stat-value.hp-value {
+            color: #ff7a7a;
+        }
+
+        .stat-item .stat-value.fire-value {
+            color: #ff7a55;
+        }
+
+        .stat-item .stat-value.cold-value {
+            color: #66b0ff;
+        }
+
+        .stat-item .stat-value.light-value {
+            color: #f5d24a;
+        }
+
+        .stat-item--wide>.stat-value.rarity-common {
+            flex: 1;
+            text-align: left;
+            min-width: 0;
+            font-weight: 700;
+            font-size: 1.15rem;
+            color: rgb(200, 200, 200);
+        }
+
+        .stat-value.rarity-common {
+            color: rgb(200, 200, 200);
+        }
+
+        .stat-value.rarity-magic {
+            color: rgb(136, 136, 255);
+        }
+
+        .stat-value.rarity-rare {
+            color: rgb(255, 255, 119);
+        }
+
+        .stat-value.rarity-legendary {
+            color: #ff6f00;
+        }
+
+        .stat-value.rarity-unique {
+            color: rgb(175, 96, 37);
+        }
+
+        .placeholder-note {
+            padding: 30px 12px;
+            text-align: center;
+            color: #667799;
+            font-size: 0.95rem;
+            font-style: italic;
+            line-height: 1.5;
+        }
+
+        /* ================================================================
+   HUD: ВЕРХНЯЯ ПАНЕЛЬ (ВОЛНА)
+   ================================================================ */
+        .game-top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--bg-hud);
+            backdrop-filter: blur(8px);
+            border-radius: var(--radius-lg);
+            padding: 12px 24px;
+            border: 1px solid var(--border-hud);
+            flex-shrink: 0;
+        }
+
+        .game-top-bar .wave-info {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .game-top-bar .wave-info .wave-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #b7cdff;
+            font-size: 1.15rem;
+        }
+
+        .game-top-bar .wave-info .wave-item .value {
+            font-weight: 700;
+            font-size: 1.3rem;
+        }
+
+        .game-top-bar .wave-info .wave-item .value.wave-value {
+            color: #ff6bff;
+        }
+
+        .game-top-bar .wave-info .wave-item .value.timer-value {
+            color: #44ddff;
+        }
+
+        .game-top-bar .wave-info .wave-item .value.enemy-value {
+            color: #ff7a7a;
+        }
+
+        .game-top-bar .wave-info .wave-item .value.warning {
+            color: #ff4444;
+            animation: blink 0.5s ease-in-out infinite alternate;
+        }
+
+        /* ================================================================
+   HUD: НИЖНЯЯ ПАНЕЛЬ (ОПЫТ)
+   ================================================================ */
+        .game-bottom-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--bg-hud);
+            backdrop-filter: blur(8px);
+            border-radius: var(--radius-lg);
+            padding: 10px 24px;
+            border: 1px solid var(--border-hud);
+            flex-shrink: 0;
+        }
+
+        .game-bottom-bar .xp-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            width: 100%;
+        }
+
+        .game-bottom-bar .xp-info .xp-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #b7cdff;
+            font-size: 1.1rem;
+        }
+
+        .game-bottom-bar .xp-info .xp-item .value {
+            font-weight: 700;
+        }
+
+        .game-bottom-bar .xp-info .xp-item .value.level-value {
+            color: #f5c542;
+        }
+
+        .game-bottom-bar .xp-info .xp-item .value.xp-value {
+            color: #c3adff;
+        }
+
+        .xp-bar-container {
+            flex: 1;
+            height: 8px;
+            background: #1a1e2c;
+            border-radius: 4px;
+            overflow: hidden;
+            min-width: 80px;
+        }
+
+        .xp-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #6a4a9a, #c3adff);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        /* ================================================================
+   ИГРОВОЕ ПОЛЕ
+   ================================================================ */
+        #pixiCanvas {
+            width: 100%;
+            height: 100%;
+            cursor: none;
+        }
+
+        #pixiCanvas>canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* ================================================================
+   УВЕДОМЛЕНИЕ О ВОЛНЕ
+   ================================================================ */
+        #waveNotification {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff6bff;
+            font-size: 3.8rem;
+            font-weight: bold;
+            text-shadow: 0 0 30px rgba(255, 107, 255, 0.5);
+            pointer-events: none;
+            opacity: 0;
+            transition: all 0.5s ease;
+            z-index: 10;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 24px 48px;
+            border-radius: 16px;
+            border: 2px solid rgba(255, 107, 255, 0.3);
+        }
+
+        #waveNotification.show {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1.1);
+        }
+
+        #waveNotification .wave-sub {
+            font-size: 1.5rem;
+            color: #b7cdff;
+            font-weight: normal;
+        }
+
+        /* ================================================================
+   КНОПКА ПЕРЕЗАПУСКА + GAME OVER / ERROR (контент внутри диалогов)
+   ================================================================ */
+        .game-over-title {
+            font-size: 3rem;
+            font-weight: bold;
+            color: #ff5577;
+            margin-bottom: 20px;
+            text-shadow: 0 0 30px rgba(255, 85, 119, 0.4);
+            text-align: center;
+        }
+
+        .game-over-stats {
+            color: #b7c7e0;
+            font-size: 1.4rem;
+            margin: 20px 0;
+            text-align: center;
+            height: 160px;
+        }
+
+        .game-over-stats p {
+            margin: 8px 0;
+        }
+
+        .game-over-stats span {
+            color: #ffffff;
+            font-weight: bold;
+        }
+
+        .btn-restart {
+            display: block;
+            margin: 15px auto 0;
+            background: rgba(255, 85, 119, 0.15);
+            border: 2px solid #ff5577;
+            color: #ff5577;
+            padding: 16px 44px;
+            border-radius: 16px;
+            font-size: 1.4rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-restart:hover {
+            background: rgba(255, 85, 119, 0.25);
+            transform: scale(1.02);
+            box-shadow: 0 0 30px rgba(255, 85, 119, 0.2);
+        }
+
+        .error-msg {
+            color: #ffaaaa;
+            font-size: 1.1rem;
+            margin: 16px 0;
+            padding: 16px;
+            background: #2a1010;
+            border-radius: 12px;
+            font-family: monospace;
+            text-align: left;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .error-help {
+            color: #b7cdff;
+            font-size: 1rem;
+            margin-bottom: 16px;
+            opacity: 0.8;
+            text-align: center;
+        }
+
+        /* ================================================================
+   ПАУЗА
+   ================================================================ */
+        .pause-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 15;
+            display: none;
+            pointer-events: none;
+        }
+
+        .pause-overlay.active {
+            display: block;
+        }
+
+        /* ================================================================
+   LEVEL UP CARDS
+   ================================================================ */
+        .bonus-cards {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+            perspective: 1000px;
+            padding: 25px 0 0 0;
+        }
+
+        .bonus-card {
+            width: 200px;
+            min-height: 260px;
+            background: linear-gradient(160deg, #1f1f35 0%, #14141f 100%);
+            border: 2px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 20px 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+            text-align: center;
+            color: #ffffff;
+        }
+
+        .bonus-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 140%;
+            height: 140%;
+            background: radial-gradient(circle, var(--glow) 0%, transparent 60%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+
+        .bonus-card:hover {
+            transform: translateY(-10px) scale(1.03);
+            border-color: var(--accent);
+            box-shadow: 0 0 25px var(--glow), 0 15px 30px rgba(0, 0, 0, 0.6);
+        }
+
+        .bonus-card:hover::before {
+            opacity: 0.35;
+        }
+
+        .bonus-card:active {
+            transform: translateY(-4px) scale(0.98);
+        }
+
+        .bonus-icon {
+            width: 72px;
+            height: 72px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.35);
+            border: 2px solid var(--accent);
+            box-shadow: 0 0 14px var(--glow), inset 0 0 14px var(--glow);
+            font-size: 34px;
+            z-index: 1;
+            transition: transform 0.3s ease;
+        }
+
+        .bonus-card:hover .bonus-icon {
+            transform: scale(1.1) rotate(-4deg);
+        }
+
+        .bonus-title {
+            font-size: 1.15rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--accent);
+            z-index: 1;
+            text-shadow: 0 0 12px var(--glow);
+        }
+
+        .bonus-value {
+            font-size: 1.7rem;
+            font-weight: 800;
+            color: #ffffff;
+            z-index: 1;
+            text-shadow: 0 0 15px var(--glow);
+        }
+
+        .bonus-value small {
+            font-size: 0.9rem;
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .bonus-desc {
+            font-size: 0.85rem;
+            line-height: 1.4;
+            color: #a8a8c0;
+            z-index: 1;
+        }
+
+        .bonus-card.str {
+            --accent: #f87171;
+            --glow: rgba(248, 113, 113, 0.6);
+        }
+
+        .bonus-card.dex {
+            --accent: #4ade80;
+            --glow: rgba(74, 222, 128, 0.6);
+        }
+
+        .bonus-card.int {
+            --accent: #60a5fa;
+            --glow: rgba(96, 165, 250, 0.6);
+        }
+
+        .bonus-card.hp {
+            --accent: #4ade80;
+            --glow: rgba(74, 222, 128, 0.6);
+        }
+
+        .bonus-card.def {
+            --accent: #94a3b8;
+            --glow: rgba(148, 163, 184, 0.6);
+        }
+
+        .bonus-card.res {
+            --accent: #22d3ee;
+            --glow: rgba(34, 211, 238, 0.6);
+        }
+
+        .bonus-card.dmg {
+            --accent: #fbbf24;
+            --glow: rgba(251, 191, 36, 0.6);
+        }
+
+        .bonus-card.fire {
+            --accent: #ef4444;
+            --glow: rgba(239, 68, 68, 0.6);
+        }
+
+        .bonus-card.cold {
+            --accent: #38bdf8;
+            --glow: rgba(56, 189, 248, 0.6);
+        }
+
+        .bonus-card.light {
+            --accent: #facc15;
+            --glow: rgba(250, 204, 21, 0.6);
+        }
+
+        .bonus-card.spd {
+            --accent: #a78bfa;
+            --glow: rgba(167, 139, 250, 0.6);
+        }
+
+        .bonus-card.crit {
+            --accent: #fb7185;
+            --glow: rgba(251, 113, 133, 0.6);
+        }
+
+        /* ================================================================
+   ЭЛЕМЕНТЫ ЛУТА
+   ================================================================ */
+        .loot-choice-btn {
+            background: rgba(20, 26, 42, 0.9);
+            border: 1px solid #2a3a5a;
+            border-radius: 8px;
+            padding: 14px 18px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: stretch;
+            gap: 14px;
+            width: 100%;
+            text-align: left;
+            position: relative;
+            margin-bottom: 10px;
+            color: #ffffff;
+        }
+
+        .loot-choice-btn:hover {
+            background: rgba(30, 40, 60, 0.95);
+            border-color: #5a7a9a;
+            transform: translateX(4px);
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .loot-choice-btn .loot-icon {
+            font-size: 2rem;
+            min-width: 44px;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .loot-choice-btn .loot-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+        }
+
+        .loot-choice-btn .loot-name {
+            font-size: 1.05rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .loot-choice-btn .loot-item-type {
+            font-size: 0.7rem;
+            font-weight: 400;
+            color: #667799;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 0 8px;
+            border-radius: 3px;
+        }
+
+        .loot-choice-btn .loot-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 12px;
+            font-size: 0.7rem;
+            color: #667799;
+            margin-bottom: 2px;
+        }
+
+        .loot-level,
+        .loot-slot,
+        .loot-requirements {
+            color: #556688;
+        }
+
+
+        .stats-group {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            padding: 2px 0;
+        }
+
+        .stats-group.base-stats {
+            margin-top: 2px;
+        }
+
+        .stats-group.affix-stats {
+            margin-top: 2px;
+        }
+
+        .stat-line {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 1rem;
+            /* было 0.8rem */
+            padding: 2px 4px;
+            border-radius: var(--radius-xs);
+        }
+
+        .stat-line .stat-icon {
+            width: 22px;
+            text-align: center;
+            font-size: 0.9rem;
+            opacity: 0.7;
+        }
+
+        .stat-line .stat-label {
+            color: var(--text-soft);
+            font-size: 0.95rem;
+            flex: 1;
+        }
+
+        .stat-line .stat-value {
+            color: var(--value-default);
+            font-weight: 500;
+            font-size: 1rem;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .stat-line.removed {
+            opacity: 0.5;
+            filter: grayscale(0.4);
+        }
+
+        .stat-line.removed .stat-label,
+        .stat-line.removed .stat-value {
+            color: var(--text-muted);
+        }
+
+        .stat-line.removed .stat-compare.worse {
+            color: var(--colour-worse);
+            font-weight: 700;
+            opacity: 1;
+        }
+
+        .stat-line .changed-value {
+            color: var(--value-changed);
+        }
+
+        .stat-line .fire-value {
+            color: var(--value-fire);
+        }
+
+        .stat-line .cold-value {
+            color: var(--value-cold);
+        }
+
+        .stat-line .light-value {
+            color: var(--value-light);
+        }
+
+        .stat-line .stat-compare {
+            min-width: 48px;
+            text-align: right;
+        }
+
+        .stat-line .stat-compare.better {
+            color: var(--colour-success);
+        }
+
+        .stat-line .stat-compare.worse {
+            color: var(--colour-worse);
+        }
+
+        .stat-line .stat-compare.equal {
+            color: var(--text-muted);
+        }
+
+        .stat-line .stat-compare.replaced {
+            color: #ffaa44;
+        }
+
+        .stat-line.affix .stat-label,
+        .stat-line.affix .stat-value {
+            color: var(--affix-explicit);
+        }
+
+        .stat-line.affix-unsupport .stat-label {
+            color: var(--affix-explicit-unsupport);
+        }
+
+        .stat-line.affix.implicit .stat-label {
+            color: #6a5a8a;
+            font-style: italic;
+        }
+
+        .stat-line.affix.implicit .stat-value {
+            color: #9a7aba;
+            font-style: italic;
+        }
+
+        .stat-line.unique-mod .stat-label {
+            color: #c8a86a;
+            font-weight: 600;
+        }
+
+        .stat-line.unique-mod .stat-value {
+            color: #f5d78a;
+            font-style: italic;
+        }
+
+        .stats-group.accessory-info .stat-line .stat-label {
+            color: var(--text-muted);
+        }
+
+        .stats-group.accessory-info .stat-line .stat-value {
+            color: var(--text-soft);
+        }
+
+        .stats-divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #2a3a5a, #3a4a6a, #2a3a5a, transparent);
+            margin: 4px 0;
+            opacity: 0.5;
+        }
+
+        .loot-compare {
+            display: flex;
+            gap: 12px;
+            margin-top: 3px;
+            padding: 0 4px;
+            font-size: 0.95rem;
+            /* было 0.8rem */
+        }
+
+        .loot-compare .better {
+            color: var(--colour-success);
+        }
+
+        .loot-compare .worse {
+            color: var(--colour-worse);
+        }
+
+        .loot-compare .equal {
+            color: var(--text-soft);
+        }
+
+
+        /* ================================================================
+   АДАПТИВНОСТЬ
+   ================================================================ */
+        @media (max-width: 768px) {
+            .app-layout {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .stat-nav {
+                flex-direction: row;
+                flex-wrap: wrap;
+                position: static;
+                justify-content: center;
+                width: 100%;
+            }
+
+            .stat-nav-btn {
+                width: 50px;
+                height: 50px;
+            }
+
+            .stat-nav-btn.active::before {
+                display: none;
+            }
+
+            .stat-nav-btn .nav-icon {
+                font-size: 1.3rem;
+            }
+
+            .stat-nav-btn .nav-label {
+                font-size: 0.5rem;
+            }
+
+            .game-canvas-container {
+                width: 100% !important;
+                height: auto !important;
+            }
+
+            .ui-dialog {
+                width: 95%;
+                max-width: 95%;
+                max-height: 90%;
+                padding: 20px;
+            }
+
+            .ui-dialog-title {
+                font-size: 1.15rem;
+                letter-spacing: 1.5px;
+            }
+
+            .game-wrapper {
+                width: 100%;
+            }
+
+            .game-top-bar {
+                flex-wrap: wrap;
+                gap: 6px;
+                padding: 10px 16px;
+            }
+
+            .game-top-bar .wave-info {
+                flex-wrap: wrap;
+                gap: 12px;
+            }
+
+            .game-bottom-bar {
+                padding: 8px 16px;
+            }
+
+            .game-bottom-bar .xp-info {
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+
+            #waveNotification {
+                font-size: 2.6rem;
+                padding: 18px 36px;
+            }
+
+            .bonus-cards {
+                gap: 10px;
+            }
+
+            .bonus-card {
+                width: 160px;
+                min-height: 220px;
+                padding: 14px 12px;
+            }
+
+            .bonus-icon {
+                width: 56px;
+                height: 56px;
+                font-size: 28px;
+            }
+
+            .bonus-title {
+                font-size: 0.95rem;
+            }
+
+            .bonus-value {
+                font-size: 1.3rem;
+            }
+
+            .bonus-desc {
+                font-size: 0.75rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-layout">
+
+        <!-- =========================================================
+         ЛЕВАЯ КОЛОНКА: КНОПКИ, КАЖДАЯ ОТКРЫВАЕТ СВОЙ ДИАЛОГ
+         ========================================================= -->
+        <nav class="stat-nav" id="statNav">
+            <button class="stat-nav-btn" data-dialog="weapon" title="Оружие и урон">
+                <span class="nav-icon">⚔️</span>
+                <span class="nav-label">Урон</span>
+            </button>
+            <button class="stat-nav-btn" data-dialog="char" title="Персон">
+                <span class="nav-icon">❤️</span>
+                <span class="nav-label">Персон</span>
+            </button>
+            <button class="stat-nav-btn" data-dialog="def" title="Защита">
+                <span class="nav-icon">🛡️</span>
+                <span class="nav-label">Защита</span>
+            </button>
+            <button class="stat-nav-btn" data-dialog="inventory" title="Инвентарь">
+                <span class="nav-icon">🎒</span>
+                <span class="nav-label">Сумка</span>
+            </button>
+            <button class="stat-nav-btn" data-dialog="skills" title="Навыки">
+                <span class="nav-icon">✨</span>
+                <span class="nav-label">Навыки</span>
+            </button>
+            <button class="stat-nav-btn" data-dialog="quests" title="Задания">
+                <span class="nav-icon">📜</span>
+                <span class="nav-label">Задания</span>
+            </button>
+            <button class="stat-nav-btn" data-dialog="map" title="Карта">
+                <span class="nav-icon">🗺️</span>
+                <span class="nav-label">Карта</span>
+            </button>
+            <button class="stat-nav-btn" data-dialog="misc" title="Разное">
+                <span class="nav-icon">📦</span>
+                <span class="nav-label">Разное</span>
+            </button>
+        </nav>
+
+        <!-- ===== ИГРОВОЙ КОНТЕЙНЕР ===== -->
+        <div class="game-wrapper" id="gameWrapper">
+            <div class="game-top-bar">
+                <div class="wave-info">
+                    <div class="wave-item">
+                        <span>⏱️</span>
+                        <span>До конца:</span>
+                        <span class="value timer-value" id="statWaveTimer">0с</span>
+                    </div>
+                    <div class="wave-item">
+                        <span>🌊</span>
+                        <span>Волна:</span>
+                        <span class="value wave-value" id="statWave">1</span>
+                    </div>
+                    <div class="wave-item">
+                        <span>👾</span>
+                        <span>Врагов:</span>
+                        <span class="value enemy-value" id="statEnemiesLeft">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="game-canvas-container" id="gameCanvasContainer">
+                <div id="pixiCanvas" style="cursor: none;"></div>
+
+                <div id="waveNotification">
+                    <div>🌊 ВОЛНА <span id="waveNumber">1</span></div>
+                    <div class="wave-sub" id="waveSub">Приготовьтесь!</div>
+                </div>
+
+                <div class="pause-overlay" id="pauseOverlay"></div>
+
+                <!-- ============================================================
+                 ДИАЛОГ: ОРУЖИЕ
+                 ============================================================ -->
+                <div class="ui-dialog-overlay" id="dlg-weapon" data-dialog="weapon">
+                    <div class="ui-dialog" data-size="lg">
+                        <div class="ui-dialog-header">
+                            <div class="ui-dialog-line"></div>
+                            <h2 class="ui-dialog-title">ОРУЖИЕ И УРОН</h2>
+                            <div class="ui-dialog-line"></div>
+                        </div>
+                        <div class="ui-dialog-sub">Информация о персонаже и экипировке</div>
+                        <button class="ui-dialog-close" data-close title="Закрыть">✕</button>
+
+                        <div class="ui-dialog-body">
+                            <div class="stat-group">
+                                <div class="stat-section-title">Оружие</div>
+                                <div class="stat-item stat-item--wide">
+                                    <span class="icon">⚔️</span>
+                                    <span class="stat-value rarity-common" id="weaponNameDisplay">Без оружия</span>
+                                </div>
+                            </div>
+
+                            <div class="stat-group">
+                                <div class="stat-section-title">Урон</div>
+                                <div class="stat-item"><span class="icon">👊</span><span class="label">Физ.
+                                        урон</span><span class="stat-value" id="statPhysDmg">0-0</span></div>
+                                <div class="stat-item"><span class="icon">🔥</span><span class="label">Огн.
+                                        урон</span><span class="stat-value fire-value" id="statFireDmg">0-0</span></div>
+                                <div class="stat-item"><span class="icon">❄️</span><span class="label">Хол.
+                                        урон</span><span class="stat-value cold-value" id="statColdDmg">0-0</span></div>
+                                <div class="stat-item"><span class="icon">⚡</span><span class="label">Молн.
+                                        урон</span><span class="stat-value light-value" id="statLightDmg">0-0</span>
+                                </div>
+                            </div>
+
+                            <div class="stat-group">
+                                <div class="stat-section-title">Атака</div>
+                                <div class="stat-item"><span class="icon">💨</span><span class="label">Скорость
+                                        атаки</span><span class="stat-value" id="statAttackSpeed">0</span></div>
+                                <div class="stat-item"><span class="icon">⭕</span><span class="label">Радиус
+                                        атаки</span><span class="stat-value" id="statAttackRange">0</span></div>
+                                <div class="stat-item"><span class="icon">🎯</span><span
+                                        class="label">Меткость</span><span class="stat-value" id="statAccuracy">0</span>
+                                </div>
+                                <div class="stat-item"><span class="icon">💥</span><span class="label">Крит.
+                                        шанс</span><span class="stat-value" id="statCritChance">0%</span></div>
+                                <div class="stat-item"><span class="icon">✖️</span><span class="label">Крит.
+                                        множитель</span><span class="stat-value" id="statCritMult">1.5x</span></div>
+                                <div class="stat-item"><span class="icon">💫</span><span
+                                        class="label">Оглушение</span><span class="stat-value"
+                                        id="statStunInc">0%</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============================================================
+                 ДИАЛОГ: ПЕРСОНАЖ
+                 ============================================================ -->
+                <div class="ui-dialog-overlay" id="dlg-char" data-dialog="char">
+                    <div class="ui-dialog" data-size="lg">
+                        <div class="ui-dialog-header">
+                            <div class="ui-dialog-line"></div>
+                            <h2 class="ui-dialog-title">ПЕРСОНАЖ</h2>
+                            <div class="ui-dialog-line"></div>
+                        </div>
+                        <div class="ui-dialog-sub">Информация о персонаже и экипировке</div>
+                        <button class="ui-dialog-close" data-close title="Закрыть">✕</button>
+
+                        <div class="ui-dialog-body">
+                            <div class="stat-group">
+                                <div class="stat-section-title">Жизнь</div>
+                                <div class="stat-item"><span class="icon">❤️</span><span
+                                        class="label">Здоровье</span><span class="stat-value hp-value"
+                                        id="hpText">0/0</span></div>
+                                <div class="stat-item"><span class="icon">💚</span><span
+                                        class="label">Регенерация</span><span class="stat-value" id="statRegen">0</span>
+                                </div>
+                                <div class="stat-item"><span class="icon">💜</span><span class="label">За
+                                        убийство</span><span class="stat-value" id="statLifePerKill">0</span></div>
+                            </div>
+
+                            <div class="stat-group">
+                                <div class="stat-section-title">Характеристики</div>
+                                <div class="stat-item"><span class="icon">💪</span><span class="label">Сила</span><span
+                                        class="stat-value" id="statStr">0</span></div>
+                                <div class="stat-item"><span class="icon">🤸</span><span
+                                        class="label">Ловкость</span><span class="stat-value" id="statDex">0</span>
+                                </div>
+                                <div class="stat-item"><span class="icon">🧠</span><span
+                                        class="label">Интеллект</span><span class="stat-value" id="statInt">0</span>
+                                </div>
+                            </div>
+
+                            <div class="stat-group">
+                                <div class="stat-section-title">Передвижение</div>
+                                <div class="stat-item"><span class="icon">🏃</span><span
+                                        class="label">Скорость</span><span class="stat-value" id="statSpeed">0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============================================================
+                 ДИАЛОГ: ЗАЩИТА
+                 ============================================================ -->
+                <div class="ui-dialog-overlay" id="dlg-def" data-dialog="def">
+                    <div class="ui-dialog" data-size="lg">
+                        <div class="ui-dialog-header">
+                            <div class="ui-dialog-line"></div>
+                            <h2 class="ui-dialog-title">ЗАЩИТА</h2>
+                            <div class="ui-dialog-line"></div>
+                        </div>
+                        <div class="ui-dialog-sub">Информация о персонаже и экипировке</div>
+                        <button class="ui-dialog-close" data-close title="Закрыть">✕</button>
+
+                        <div class="ui-dialog-body">
+                            <div class="stat-group">
+                                <div class="stat-section-title">Защита</div>
+                                <div class="stat-item"><span class="icon">🔮</span><span
+                                        class="label">Энергощит</span><span class="stat-value" id="statES">0</span>
+                                </div>
+                                <div class="stat-item"><span class="icon">🌪️</span><span
+                                        class="label">Уклонение</span><span class="stat-value" id="statEvasion">0</span>
+                                </div>
+                                <div class="stat-item"><span class="icon">🛡️</span><span
+                                        class="label">Броня</span><span class="stat-value" id="statArmor">0</span></div>
+                                <div class="stat-item"><span class="icon">🛡️</span><span class="label">Физ.
+                                        снижение</span><span class="stat-value" id="statPhysReduction">0%</span></div>
+                                <div class="stat-item"><span class="icon">🛡️</span><span class="label">Блок</span><span
+                                        class="stat-value" id="statBlock">0%</span></div>
+                                <div class="stat-item"><span class="icon">🦔</span><span class="label">Отражение
+                                        урона</span><span class="stat-value" id="statReflect">0</span></div>
+                                <div class="stat-item"><span class="icon">🌀</span><span class="label">Сопр.
+                                        оглуш.</span><span class="stat-value" id="statStunReduction">0%</span></div>
+                            </div>
+
+                            <div class="stat-group">
+                                <div class="stat-section-title">Сопротивления</div>
+                                <div class="stat-item"><span class="icon">🔥</span><span class="label">Сопр.
+                                        огню</span><span class="stat-value" id="statFireRes">0%</span></div>
+                                <div class="stat-item"><span class="icon">❄️</span><span class="label">Сопр.
+                                        холоду</span><span class="stat-value" id="statColdRes">0%</span></div>
+                                <div class="stat-item"><span class="icon">⚡</span><span class="label">Сопр.
+                                        молнии</span><span class="stat-value" id="statLightRes">0%</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============================================================
+                 ДИАЛОГ: ИНВЕНТАРЬ (заглушка)
+                 ============================================================ -->
+                <div class="ui-dialog-overlay" id="dlg-inventory" data-dialog="inventory">
+                    <div class="ui-dialog" data-size="lg">
+                        <div class="ui-dialog-header">
+                            <div class="ui-dialog-line"></div>
+                            <h2 class="ui-dialog-title">ИНВЕНТАРЬ</h2>
+                            <div class="ui-dialog-line"></div>
+                        </div>
+                        <button class="ui-dialog-close" data-close title="Закрыть">✕</button>
+
+                        <div class="ui-dialog-body">
+                            <div class="placeholder-note">🎒 Здесь будет инвентарь</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============================================================
+                 ДИАЛОГ: НАВЫКИ (заглушка)
+                 ============================================================ -->
+                <div class="ui-dialog-overlay" id="dlg-skills" data-dialog="skills">
+                    <div class="ui-dialog" data-size="lg">
+                        <div class="ui-dialog-header">
+                            <div class="ui-dialog-line"></div>
+                            <h2 class="ui-dialog-title">НАВЫКИ</h2>
+                            <div class="ui-dialog-line"></div>
+                        </div>
+                        <button class="ui-dialog-close" data-close title="Закрыть">✕</button>
+
+                        <div class="ui-dialog-body">
+                            <div class="placeholder-note">✨ Здесь будет дерево навыков</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============================================================
+                 ДИАЛОГ: ЗАДАНИЯ (заглушка)
+                 ============================================================ -->
+                <div class="ui-dialog-overlay" id="dlg-quests" data-dialog="quests">
+                    <div class="ui-dialog" data-size="lg">
+                        <div class="ui-dialog-header">
+                            <div class="ui-dialog-line"></div>
+                            <h2 class="ui-dialog-title">ЗАДАНИЯ</h2>
+                            <div class="ui-dialog-line"></div>
+                        </div>
+                        <button class="ui-dialog-close" data-close title="Закрыть">✕</button>
+
+                        <div class="ui-dialog-body">
+                            <div class="placeholder-note">📜 Здесь будут задания</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============================================================
+                 ДИАЛОГ: КАРТА (заглушка)
+                 ============================================================ -->
+                <div class="ui-dialog-overlay" id="dlg-map" data-dialog="map">
+                    <div class="ui-dialog" data-size="lg">
+                        <div class="ui-dialog-header">
+                            <div class="ui-dialog-line"></div>
+                            <h2 class="ui-dialog-title">КАРТА</h2>
+                            <div class="ui-dialog-line"></div>
+                        </div>
+                        <button class="ui-dialog-close" data-close title="Закрыть">✕</button>
+
+                        <div class="ui-dialog-body">
+                            <div class="placeholder-note">🗺️ Здесь будет карта</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============================================================
+                 ДИАЛОГ: РАЗНОЕ (заглушка)
+                 ============================================================ -->
+                <div class="ui-dialog-overlay" id="dlg-misc" data-dialog="misc">
+                    <div class="ui-dialog" data-size="lg">
+                        <div class="ui-dialog-header">
+                            <div class="ui-dialog-line"></div>
+                            <h2 class="ui-dialog-title">РАЗНОЕ</h2>
+                            <div class="ui-dialog-line"></div>
+                        </div>
+                        <button class="ui-dialog-close" data-close title="Закрыть">✕</button>
+
+                        <div class="ui-dialog-body">
+                            <div class="placeholder-note">📦 Здесь будут прочие разделы</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============================================================
+                 ДИАЛОГ: LEVEL UP (без крестика, нельзя закрыть фоном)
+                 ============================================================ -->
+                <div class="ui-dialog-overlay" id="dlg-levelup" data-dialog="levelup" data-dismissable="false">
+                    <div class="ui-dialog" data-size="lg">
+                        <div class="ui-dialog-header">
+                            <div class="ui-dialog-line"></div>
+                            <h2 class="ui-dialog-title">⬆ УРОВЕНЬ ПОВЫШЕН!</h2>
+                            <div class="ui-dialog-line"></div>
+                        </div>
+                        <!-- <div class="ui-dialog-sub">Выберите бонус</div> -->
+                        <div class="ui-dialog-body">
+                            <div class="bonus-cards">
+                                <div class="bonus-card hp">
+                                    <div class="bonus-icon">❤️</div>
+                                    <div class="bonus-title">Здоровье</div>
+                                    <div class="bonus-value">+25 <small>HP</small></div>
+                                    <div class="bonus-desc">Увеличивает максимальный запас здоровья</div>
+                                </div>
+                                <div class="bonus-card str">
+                                    <div class="bonus-icon">💪</div>
+                                    <div class="bonus-title">Сила</div>
+                                    <div class="bonus-value">+5 <small>STR</small></div>
+                                    <div class="bonus-desc">Повышает силу атаки и пробитие брони</div>
+                                </div>
+                                <div class="bonus-card dmg">
+                                    <div class="bonus-icon">⚔️</div>
+                                    <div class="bonus-title">Физ. урон</div>
+                                    <div class="bonus-value">+10% <small>DMG</small></div>
+                                    <div class="bonus-desc">Увеличивает весь физический урон</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============================================================
+                 ДИАЛОГ: LOOT CHOICE
+                 ============================================================ -->
+                <div class="ui-dialog-overlay" id="dlg-loot" data-dialog="loot">
+                    <div class="ui-dialog" data-size="lg">
+                        <div class="ui-dialog-header">
+                            <div class="ui-dialog-line"></div>
+                            <h2 class="ui-dialog-title">✦ ВЫБЕРИТЕ ДОБЫЧУ ✦</h2>
+                            <div class="ui-dialog-line"></div>
+                        </div>
+                        <div class="ui-dialog-sub">Нажмите на предмет, чтобы экипировать</div>
+                        <button class="ui-dialog-close" data-close title="Закрыть">✕</button>
+
+                        <div class="ui-dialog-body"></div>
+                    </div>
+                </div>
+
+                <!-- ============================================================
+                 ДИАЛОГ: GAME OVER
+                 ============================================================ -->
+                <div class="ui-dialog-overlay" id="dlg-gameover" data-dialog="gameover" data-dismissable="false">
+                    <div class="ui-dialog" data-size="sm" data-variant="danger">
+                        <div class="ui-dialog-header">
+                            <div class="ui-dialog-line"></div>
+                            <h2 class="ui-dialog-title">💀 ПОРАЖЕНИЕ</h2>
+                            <div class="ui-dialog-line"></div>
+                        </div>
+
+                        <div class="ui-dialog-body">
+                            <div class="game-over-stats">
+                                <p>Волна: <span id="gameOverWave">0</span></p>
+                                <p>Уровень: <span id="gameOverLevel">1</span></p>
+                                <button class="btn-restart">🔄 Перезапустить</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============================================================
+                 ДИАЛОГ: ERROR
+                 ============================================================ -->
+                <div class="ui-dialog-overlay" id="dlg-error" data-dialog="error" data-dismissable="false">
+                    <div class="ui-dialog" data-size="md" data-variant="danger">
+                        <div class="ui-dialog-header">
+                            <div class="ui-dialog-line"></div>
+                            <h2 class="ui-dialog-title">❌ КРИТИЧЕСКАЯ ОШИБКА</h2>
+                            <div class="ui-dialog-line"></div>
+                        </div>
+
+                        <div class="ui-dialog-body">
+                            <div class="error-msg" id="errorMessage">Неизвестная ошибка</div>
+                            <div class="error-help">Пожалуйста, сообщите об ошибке разработчику</div>
+                            <button class="btn-restart" id="errorRestartBtn">🔄 Перезапустить игру</button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="game-bottom-bar">
+                <div class="xp-info">
+                    <div class="xp-item">
+                        <span>🏆</span>
+                        <span>Уровень:</span>
+                        <span class="value level-value" id="statLevel">1</span>
+                    </div>
+                    <div class="xp-bar-container">
+                        <div class="xp-bar-fill" id="xpBarFill" style="width: 0%;"></div>
+                    </div>
+                    <div class="xp-item">
+                        <span>⭐</span>
+                        <span class="value xp-value" id="xpText">0 / 100</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js"></script>
+    <script src="app.js"></script>
+
+
+</body>
+
+</html>

@@ -1,0 +1,159 @@
+{
+  "pool": [
+    { "type": "Str",  "mod": "flat", "min": 5,  "max": 10,  "weight": 1.2 },
+    { "type": "Dex",  "mod": "flat", "min": 5,  "max": 10,  "weight": 1.2 },
+    { "type": "Int",  "mod": "flat", "min": 5,  "max": 10,  "weight": 1.2 },
+    { "type": "Str", "mod": "percent", "min": 5, "max": 10, "weight": 0.8 },
+    { "type": "Dex", "mod": "percent", "min": 5, "max": 10, "weight": 0.8 },
+    { "type": "Int", "mod": "percent", "min": 5, "max": 10, "weight": 0.8 },    
+
+    { "type": "LifeMax",       "mod": "flat",    "min": 15, "max": 30, "weight": 1.5 },
+    { "type": "LifeMax",       "mod": "percent", "min": 5,  "max": 10, "weight": 0.6 },
+    { "type": "LifePerSecond", "mod": "flat",    "min": 0.5, "max": 2, "weight": 1.0 },
+    { "type": "LifePerKill",   "mod": "flat",    "min": 10,  "max": 30, "weight": 1.0 },
+    
+    { "type": "ES",  "mod": "flat",    "min": 20, "max": 40, "weight": 1.2 },
+    { "type": "ES",  "mod": "percent",    "min": 4, "max": 10, "weight": 0.6 },
+    { "type": "ESRegenDelay", "mod": "percent", "min": -20, "max": -10, "weight": 0.6 },
+    { "type": "ESRegenRate",  "mod": "percent", "min": 15,  "max": 30,  "weight": 0.6 },
+    { "type": "ESRegenRate",  "mod": "flat",    "min": 1,   "max": 3,   "weight": 0.5 },    
+
+    { "type": "Armour",       "mod": "flat",    "min": 10, "max": 25, "weight": 1.2 },
+    { "type": "Armour",       "mod": "percent", "min": 5,  "max": 10, "weight": 0.6 },
+    { "type": "Evasion",      "mod": "flat",    "min": 10, "max": 25, "weight": 1.2 },
+    { "type": "Evasion",      "mod": "percent", "min": 5, "max": 10, "weight": 0.6 },
+
+    { "type": "FireResist",  "mod": "percentPoint", "min": 5, "max": 12, "weight": 0.8 },
+    { "type": "ColdResist",  "mod": "percentPoint", "min": 5, "max": 12, "weight": 0.8 },
+    { "type": "LightResist", "mod": "percentPoint", "min": 5, "max": 12, "weight": 0.8 },
+
+    { "type": "PhysDamage",  "mod": "percent", "min": 5, "max": 10, "weight": 0.5 },
+    { "type": "FireDamage",  "mod": "percent", "min": 5, "max": 10,  "weight": 0.9 },
+    { "type": "ColdDamage",  "mod": "percent", "min": 5, "max": 10,  "weight": 0.9 },
+    { "type": "LightDamage", "mod": "percent", "min": 5, "max": 10,  "weight": 0.9 },
+
+    { "type": "AttackSpeed",        "mod": "percent",      "min": 5,   "max": 10,  "weight": 0.7 },
+    { "type": "AttackRange",        "mod": "percent",      "min": 5,   "max": 10,  "weight": 0.5 },
+    { "type": "MovementSpeed",      "mod": "percentPoint", "min": 5,   "max": 10,  "weight": 0.7 },
+    { "type": "Accuracy",           "mod": "flat",         "min": 6,   "max": 16,  "weight": 0.9 },
+    { "type": "CriticalChance",     "mod": "percentPoint", "min": 2,   "max": 5,   "weight": 0.5 },
+    { "type": "CriticalMultiplier", "mod": "flat",         "min": 0.1, "max": 0.4, "weight": 0.5 },
+
+    { "type": "StunInc",       "mod": "percent",      "min": 10, "max": 25, "weight": 0.7 },
+    { "type": "StunInc",       "mod": "percentPoint", "min": 3,  "max": 8,  "weight": 0.6 },
+    { "type": "StunReduction", "mod": "percent",      "min": 10, "max": 25, "weight": 0.7 },
+    { "type": "StunReduction", "mod": "percentPoint", "min": 3,  "max": 8,  "weight": 0.6 },
+
+    { "type": "PhysReflect",  "mod": "percent", "min": 5,  "max": 15, "weight": 0.6 },
+    { "type": "PhysReflect",  "mod": "flat",    "min": 3,  "max": 8,  "weight": 0.5 },
+    { "type": "PhysReduction","mod": "percent", "min": 3,  "max": 8,  "weight": 0.6 },
+    { "type": "Block",        "mod": "percent", "min": 3,  "max": 8,  "weight": 0.6 },
+    { "type": "Block",        "mod": "percentPoint", "min": 2, "max": 5, "weight": 0.5 }
+  ],
+
+  "keystones": [
+    {
+      "id": "blood_and_sand",
+      "weight": 1.0,
+      "primary":   { "type": "PhysDamage", "mod": "percent", "min": 25, "max": 40 },
+      "secondary": { "type": "LifeMax",    "mod": "percent", "min": -25, "max": -15 }
+    },
+    {
+      "id": "glass_cannon",
+      "weight": 0.8,
+      "primary":   { "type": "FireDamage", "mod": "percent", "min": 20, "max": 35 },
+      "secondary": { "type": "Armour",     "mod": "percent", "min": -35, "max": -20 }
+    },
+    {
+      "id": "berserker_rage",
+      "weight": 0.9,
+      "primary":   { "type": "AttackSpeed", "mod": "percent",      "min": 15, "max": 25 },
+      "secondary": { "type": "FireResist",  "mod": "percentPoint", "min": -15, "max": -8 }
+    },
+    {
+      "id": "heavy_armour",
+      "weight": 1.0,
+      "primary":   { "type": "Armour",        "mod": "percent", "min": 40, "max": 70 },
+      "secondary": { "type": "MovementSpeed", "mod": "percent", "min": -25, "max": -15 }
+    },
+    {
+      "id": "light_step",
+      "weight": 1.0,
+      "primary":   { "type": "Evasion", "mod": "percent", "min": 30, "max": 50 },
+      "secondary": { "type": "Armour",  "mod": "percent", "min": -30, "max": -20 }
+    },
+    {
+      "id": "crystal_heart",
+      "weight": 0.7,
+      "primary":   { "type": "ES", "mod": "percent", "min": 40, "max": 70 },
+      "secondary": { "type": "LifeMax",      "mod": "percent", "min": -25, "max": -15 }
+    },
+    {
+      "id": "pyromancer",
+      "weight": 0.9,
+      "primary":   { "type": "FireDamage", "mod": "percent", "min": 30, "max": 50 },
+      "secondary": { "type": "ColdDamage", "mod": "percent", "min": -25, "max": -15 }
+    },
+    {
+      "id": "cryomancer",
+      "weight": 0.9,
+      "primary":   { "type": "ColdDamage", "mod": "percent", "min": 30, "max": 50 },
+      "secondary": { "type": "FireDamage", "mod": "percent", "min": -25, "max": -15 }
+    },
+    {
+      "id": "electromancer",
+      "weight": 0.9,
+      "primary":   { "type": "LightDamage", "mod": "percent", "min": 30, "max": 50 },
+      "secondary": { "type": "FireDamage",  "mod": "percent", "min": -25, "max": -15 }
+    },
+    {
+      "id": "double_strike",
+      "weight": 0.9,
+      "primary":   { "type": "AttackSpeed","mod": "percent", "min": 15, "max": 25 },
+      "secondary": { "type": "PhysDamage", "mod": "percent", "min": -15, "max": -8 }
+    },
+    {
+      "id": "glass_resist",
+      "weight": 1.0,
+      "primary":   { "type": "FireResist", "mod": "percentPoint", "min": 15, "max": 25 },
+      "secondary": { "type": "LifeMax",    "mod": "percent",      "min": -15, "max": -8 }
+    },
+    {
+      "id": "crit_lord",
+      "weight": 0.7,
+      "primary":   { "type": "CriticalMultiplier", "mod": "flat",    "min": 0.4, "max": 0.8 },
+      "secondary": { "type": "AttackSpeed",        "mod": "percent", "min": -15, "max": -8 }
+    },
+    {
+      "id": "precision_strike",
+      "weight": 0.9,
+      "primary":   { "type": "CriticalChance", "mod": "percentPoint", "min": 5,  "max": 10 },
+      "secondary": { "type": "PhysicalDamage", "mod": "percent",      "min": -12, "max": -6 }
+    },
+
+    {
+      "id": "thorned_hide",
+      "weight": 0.8,
+      "primary":   { "type": "PhysReflect", "mod": "percent", "min": 30, "max": 50 },
+      "secondary": { "type": "LifeMax",     "mod": "percent", "min": -20, "max": -10 }
+    },
+    {
+      "id": "stun_lord",
+      "weight": 0.9,
+      "primary":   { "type": "StunInc", "mod": "percent", "min": 40, "max": 70 },
+      "secondary": { "type": "AttackSpeed", "mod": "percent", "min": -15, "max": -8 }
+    },
+    {
+      "id": "block_master",
+      "weight": 1.0,
+      "primary":   { "type": "Block", "mod": "percentPoint", "min": 10, "max": 20 },
+      "secondary": { "type": "Evasion", "mod": "percent", "min": -30, "max": -20 }
+    },
+    {
+      "id": "es_overflow",
+      "weight": 0.7,
+      "primary":   { "type": "ESRegenRate", "mod": "percent", "min": 50, "max": 80 },
+      "secondary": { "type": "ES", "mod": "percent", "min": -25, "max": -15 }
+    }
+  ]
+}

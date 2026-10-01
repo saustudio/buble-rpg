@@ -1,0 +1,9 @@
+{
+  "name": "buble-rpg",
+  "private": true,
+  "scripts": {
+    "build": "npx --yes -p esbuild@0.25.0 esbuild src/app.ts --bundle --format=iife --platform=browser --target=es2020 --outfile=dist/app.js --minify --sourcemap",
+    "dev": "npx --yes -p concurrently concurrently \"npx --yes -p esbuild@0.25.0 esbuild src/app.ts --bundle --format=iife --platform=browser --target=es2020 --outfile=dist/app.js --sourcemap --watch\" \"npx --yes -p browser-sync browser-sync start --server dist --files \\\"dist/*.*\\\" --no-open --port 3000\"",
+    "typecheck": "npx --yes -p typescript@5.9.2 tsc --noEmit"
+  }
+}
