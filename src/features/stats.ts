@@ -70,6 +70,8 @@ export interface IEntityStats
     // Оглушение
     StunInc: number;
     StunReduction: number;
+    StunDurationInc: number;
+    StunDurationReduction: number;
 
     // Жизнь и регенерация
     LifeMax: number;
@@ -118,7 +120,9 @@ export class RawStats
     AttributesInc = 0;
     //Оглушение
     StunInc = 0;
+    StunIncPerc = 0;
     StunReduction = 0;
+    StunReductionPerc = 0;
 
     // Жизнь
     LifeMaxFlat = 0;
@@ -196,6 +200,7 @@ export class EntityStatsService
         return {
             Str: 0, Dex: 0, Int: 0,
             StunInc: 0, StunReduction: 0,
+            StunDurationInc: 0, StunDurationReduction: 0,
             LifeMax: 0, LifePerSecond: 0, LifePerKill: 0,
             Armour: 0, Evasion: 0,
             ES: 0, ESRegenDelay: 5, ESRegenRate: 10,
@@ -285,6 +290,8 @@ export class EntityStatsService
         // ─── Оглушение ───
         s.StunInc = base.StunInc + raw.StunInc;
         s.StunReduction = base.StunReduction + raw.StunReduction;
+        s.StunDurationInc = base.StunDurationInc + raw.StunIncPerc;
+        s.StunDurationReduction = base.StunDurationReduction + raw.StunReductionPerc;
 
         return s;
     }

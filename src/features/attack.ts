@@ -5,6 +5,7 @@ import { RigidbodyComponent } from "./physics";
 import { EntityStatsComponent } from "./stats";
 import { FractionComponent } from "./targeting";
 import { HealthComponent } from "./health";
+import { StunComponent } from "./stun";
 import { UIDialog } from "./dialog";
 declare const PIXI: any;
 
@@ -33,6 +34,7 @@ export class AttackHitComponent implements IComponent
     public Fire: number = 0;
     public Cold: number = 0;
     public Light: number = 0;
+    public IsCrit: boolean = false;
 
     constructor(public Source: EntityId, public Target: EntityId) { }
 }
@@ -56,6 +58,9 @@ class AttackSystem implements System
 
         for (const source of sourceList)
         {
+            // оглушённые не атакуют
+            if (World.HasComponent(source, StunComponent)) continue;
+
             // проверка готовности удара
             const cooldown = World.GetComponent(source, AttackInterval);
             if (cooldown)
@@ -108,6 +113,7 @@ class AttackSystem implements System
             hit.Light = Math.floor(sourceStats.LightDamageMin + Math.random() * (sourceStats.LightDamageMax - sourceStats.LightDamageMin + 1));
 
             const isCrit = Math.random() * 100 < sourceStats.CriticalChance;
+            hit.IsCrit = isCrit;
             if (isCrit) { hit.Phys *= sourceStats.CriticalMultiplier; hit.Fire *= sourceStats.CriticalMultiplier; hit.Cold *= 2; hit.Light *= sourceStats.CriticalMultiplier; }
 
             World.EntityCreate().SetComponent(hit);
@@ -308,6 +314,9 @@ export class DamageSystem implements System
             let amount = damage.Phys + damage.Fire + damage.Cold + damage.Light;
 
             // Сначала ES
+            if (Number.isNaN(health.EsCurrent)) health.EsCurrent = 0;
+            if (Number.isNaN(health.LifeCurrent)) health.LifeCurrent = 0;
+
             const esAbsorb = Math.min(health.EsCurrent, amount);
             health.EsCurrent -= esAbsorb;
             amount -= esAbsorb;
@@ -328,7 +337,7 @@ export class DamageSystem implements System
 
 export class BlockEffectComponent implements IComponent { constructor(public Source: EntityId, public Target: EntityId, public Lifetime: number, public Elapsed: number = 0) { } }
 export class MissEffectComponent implements IComponent { constructor(public Source: EntityId, public Target: EntityId, public Lifetime: number, public Elapsed: number = 0) { } }
-export class HitEffectComponent implements IComponent { constructor(public Source: EntityId, public Target: EntityId, public Amount: number, public Lifetime: number, public Elapsed: number = 0) { } }
+export class HitEffectComponent implements IComponent { constructor(public Source: EntityId, public Target: EntityId, public Amount: number, public IsCrit: boolean, public Lifetime: number, public Elapsed: number = 0) { } }
 
 export class BattleEffectSystem implements System
 {
@@ -350,7 +359,7 @@ export class BattleEffectSystem implements System
         {
             const e = World.GetComponent(eventId, AttackHitComponent)!;
             const total = e.Phys + e.Fire + e.Cold + e.Light;
-            this.SpawnHitEffect(e.Source, e.Target, total);
+            this.SpawnHitEffect(e.Source, e.Target, total, e.IsCrit);
         }
 
         const blockEvents = World.EntityQuery(DefenceBlockComponent);
@@ -411,7 +420,7 @@ export class BattleEffectSystem implements System
             .SetComponent(new BlockEffectComponent(source, target, 0.6));
     }
 
-    private SpawnHitEffect(source: EntityId, target: EntityId, amount: number): void
+    private SpawnHitEffect(source: EntityId, target: EntityId, amount: number, isCrit: boolean): void
     {
         const targetBody = World.GetComponent(target, RigidbodyComponent)!;
         const targetPos = World.GetComponent(target, Transform2DComponent)!;
@@ -420,7 +429,7 @@ export class BattleEffectSystem implements System
 
         World.EntityCreate()
             .SetComponent(new Transform2DComponent(x, y))
-            .SetComponent(new HitEffectComponent(source, target, amount, 0.6));
+            .SetComponent(new HitEffectComponent(source, target, amount, isCrit, 0.6));
     }
 }
 
@@ -454,7 +463,8 @@ export class BattleEffectRenderer implements IRenderer
             const pos = World.GetComponent(entity, Transform2DComponent)!;
             const effect = World.GetComponent(entity, HitEffectComponent)!;
             const progress = Math.min(1, effect.Elapsed / Math.max(0.0001, effect.Lifetime));
-            this.RenderEffect(pos.X, pos.Y, progress, 1 - progress, effect.Amount.toFixed(), 0xffff00);
+            const color = effect.IsCrit ? 0xffff00 : 0xffffff;
+            this.RenderEffect(pos.X, pos.Y, progress, 1 - progress, effect.Amount.toFixed(), color);
         }
 
     }

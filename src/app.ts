@@ -7,6 +7,7 @@ import { InitUserModule } from "./features/user";
 import { InitLootModule } from "./features/loot";
 import { InitTargetingModule } from "./features/targeting";
 import { InitAttackModule } from "./features/attack";
+import { InitStunModule } from "./features/stun";
 import { InitExperienceModule } from "./features/experience";
 import { InitBonusModule } from "./features/bonuses";
 import { InitSpawnModule } from "./features/spawn";
@@ -40,6 +41,7 @@ class App
         InitEquipmentModule(this.gameLoop);
         InitStatsModule(this.gameLoop);
         InitAttackModule();
+        InitStunModule();
         InitHealthModule();
         InitLootModule(this.gameLoop);
         InitExperienceModule(this.gameLoop);

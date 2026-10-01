@@ -114,7 +114,7 @@ class UI
             {
                 EquipmentService.Equip(userEquipment, lootItem);
                 loot.ItemList.delete(key);
-                this.ShowLoot(lootEntity, loot);
+                if (loot.ItemList.size > 0) this.ShowLoot(lootEntity, loot);
             });
 
             this.dialog.Container.appendChild(btn);

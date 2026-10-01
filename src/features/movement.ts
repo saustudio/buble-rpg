@@ -3,6 +3,7 @@ import { GameStateComponent, EGameState } from "./gamestate"
 import { RigidbodyComponent } from "./physics";
 import { EntityStatsComponent } from "./stats";
 import { TargetComponent } from "./targeting";
+import { StunComponent } from "./stun";
 
 //#region ФИЧА: движение
 
@@ -28,6 +29,14 @@ export class MovementSystem implements System
             const vel = World.GetComponent(entity, VelocityComponent)!;
             const body = World.GetComponent(entity, RigidbodyComponent)!;
             const stats = World.GetComponent(entity, EntityStatsComponent)!.Final;
+
+            // оглушённые не двигаются
+            if (World.HasComponent(entity, StunComponent))
+            {
+                vel.DirX = 0;
+                vel.DirY = 0;
+                continue;
+            }
 
             let speed = stats.MovementSpeed;
             speed *= (body.BaseMass / body.Mass);
