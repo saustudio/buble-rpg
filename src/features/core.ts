@@ -544,6 +544,7 @@ export class Graphics
                 child.destroy({ children: true, texture: true, baseTexture: true });
             }
         };
+        
         destroyAll(Graphics.TextLayer);
         destroyAll(Graphics.EffectsLayer);
         destroyAll(Graphics.UILayer);

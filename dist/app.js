@@ -1224542,13 +1224542,10 @@ ${e?.stack || ""}</pre>
         const sourceStats = World.GetComponent(hit.Source, EntityStatsComponent)?.Final;
         const effectiveLife = Math.max(1, targetStats.LifeMax + targetStats.ES);
         const baseChance = damage / effectiveLife * _StunSystem.ChancePerLifePercent;
-        const chance = Math.max(0, Math.min(100, baseChance + (sourceStats?.StunInc ?? 0) - targetStats.StunReduction));
+        const chance = Math.max(0, Math.min(100, baseChance + (sourceStats?.Stun ?? 0) - targetStats.StunReduction));
         if (Math.random() * 100 >= chance) continue;
         const reduction = Math.max(0, Math.min(_StunSystem.MaxDurationReduction, targetStats.StunDurationReduction)) / 100;
-        const duration = Math.max(
-          0.1,
-          _StunSystem.BaseDuration * (1 + (sourceStats?.StunDurationInc ?? 0) / 100) * (1 - reduction)
-        );
+        const duration = Math.max(0.1, _StunSystem.BaseDuration * (1 + (sourceStats?.StunDuration ?? 0) / 100) * (1 - reduction));
         const existing = World.GetComponent(hit.Target, StunComponent);
         if (existing) {
           existing.Duration = Math.max(existing.Duration, duration);
@@ -1225065,6 +1225062,108 @@ ${e?.stack || ""}</pre>
     new UI(ticker);
   }
 
+  // src/data/wave.json
+  var wave_default = [
+    {
+      Id: "horde",
+      Weight: 1,
+      Effects: [
+        { Type: "MonsterCount", ValueType: "percent", Min: 25, Max: 40 }
+      ]
+    },
+    {
+      Id: "legion",
+      Weight: 0.8,
+      Effects: [
+        { Type: "MonsterCount", ValueType: "flat", Min: 2, Max: 4 }
+      ]
+    },
+    {
+      Id: "veterans",
+      Weight: 0.9,
+      Effects: [
+        { Type: "MonsterLevel", ValueType: "flat", Min: 1, Max: 2 }
+      ]
+    },
+    {
+      Id: "toughened",
+      Weight: 1,
+      Effects: [
+        { Type: "MonsterHealth", ValueType: "percent", Min: 20, Max: 40 }
+      ]
+    },
+    {
+      Id: "savage",
+      Weight: 1,
+      Effects: [
+        { Type: "MonsterDamage", ValueType: "percent", Min: 15, Max: 30 }
+      ]
+    },
+    {
+      Id: "swift",
+      Weight: 0.8,
+      Effects: [
+        { Type: "MonsterSpeed", ValueType: "percentPoint", Min: 10, Max: 20 },
+        { Type: "SpawnSpeed", ValueType: "percent", Min: 15, Max: 30 }
+      ]
+    },
+    {
+      Id: "surge",
+      Weight: 0.7,
+      Effects: [
+        { Type: "SpawnSpeed", ValueType: "percent", Min: 25, Max: 45 },
+        { Type: "MonsterSpeed", ValueType: "percentPoint", Min: 5, Max: 12 }
+      ]
+    },
+    {
+      Id: "warded",
+      Weight: 0.8,
+      Effects: [
+        { Type: "MonsterResist", ValueType: "percentPoint", Min: 15, Max: 25 }
+      ]
+    },
+    {
+      Id: "greed",
+      Weight: 0.9,
+      Effects: [
+        { Type: "MonsterCount", ValueType: "percent", Min: 15, Max: 25 },
+        { Type: "ItemQuantity", ValueType: "percent", Min: 30, Max: 60 }
+      ]
+    },
+    {
+      Id: "avidity",
+      Weight: 0.8,
+      Effects: [
+        { Type: "ItemQuantity", ValueType: "percent", Min: 20, Max: 40 },
+        { Type: "ItemRarity", ValueType: "percent", Min: 20, Max: 40 }
+      ]
+    },
+    {
+      Id: "elite",
+      Weight: 0.7,
+      Effects: [
+        { Type: "EliteChance", ValueType: "percentPoint", Min: 10, Max: 20 },
+        { Type: "ItemRarity", ValueType: "percent", Min: 15, Max: 30 }
+      ]
+    },
+    {
+      Id: "cursed",
+      Weight: 0.7,
+      Effects: [
+        { Type: "MonsterHealth", ValueType: "percent", Min: 15, Max: 25 },
+        { Type: "MonsterResist", ValueType: "percentPoint", Min: 10, Max: 18 }
+      ]
+    },
+    {
+      Id: "bloodlust",
+      Weight: 0.6,
+      Effects: [
+        { Type: "MonsterDamage", ValueType: "percent", Min: 25, Max: 40 },
+        { Type: "SpawnSpeed", ValueType: "percent", Min: 10, Max: 20 }
+      ]
+    }
+  ];
+
   // src/features/spawn.ts
   var SpawnEntityComponent = class {
     constructor(Power) {
@@ -1225074,83 +1225173,194 @@ ${e?.stack || ""}</pre>
   };
   var SpawnComponent = class {
     constructor() {
-      __publicField(this, "Lvl", 0);
+      __publicField(this, "Lvl", 1);
       __publicField(this, "Max", 0);
       __publicField(this, "Current", 0);
       __publicField(this, "Killed", 0);
       __publicField(this, "SpawnTimer", 0);
-      __publicField(this, "DurationTimer", 0);
       __publicField(this, "PrepareTimer", 2);
+      __publicField(this, "Modifiers", []);
     }
   };
-  var SpawnSystem = class {
-    // полная длительность
+  var WaveChooseComponent = class {
     constructor() {
-      __publicField(this, "WAVE_DURATION", 60);
+      __publicField(this, "Offers", []);
+      __publicField(this, "Chosen", null);
+    }
+  };
+  var _WaveService = class _WaveService {
+    RollMods(count) {
+      const pool = [...wave_default];
+      const result = [];
+      for (let i = 0; i < count && pool.length > 0; i++) {
+        const picked = this.PickWeighted(pool);
+        pool.splice(pool.indexOf(picked), 1);
+        result.push(this.RollMod(picked));
+      }
+      return result;
+    }
+    Stats(modifiers) {
+      let countFlat = 0, countPercent = 0;
+      let monsterLevel = 0;
+      let healthPercent = 0, damagePercent = 0;
+      let speedPoint = 0, spawnSpeedPercent = 0;
+      let resistPoint = 0, elitePoint = 0;
+      let itemQuantityPercent = 0, itemRarityPercent = 0;
+      for (const modifier of modifiers) {
+        for (const effect of modifier.Effects) {
+          switch (effect.Type) {
+            case "MonsterCount" /* MONSTER_COUNT */:
+              if (effect.ValueType === "flat" /* FLAT */) countFlat += effect.Min;
+              else countPercent += effect.Min;
+              break;
+            case "MonsterLevel" /* MONSTER_LEVEL */:
+              monsterLevel += effect.Min;
+              break;
+            case "MonsterHealth" /* MONSTER_HEALTH */:
+              healthPercent += effect.Min;
+              break;
+            case "MonsterDamage" /* MONSTER_DAMAGE */:
+              damagePercent += effect.Min;
+              break;
+            case "MonsterSpeed" /* MONSTER_SPEED */:
+              speedPoint += effect.Min;
+              break;
+            case "SpawnSpeed" /* SPAWN_SPEED */:
+              spawnSpeedPercent += effect.Min;
+              break;
+            case "MonsterResist" /* MONSTER_RESIST */:
+              resistPoint += effect.Min;
+              break;
+            case "EliteChance" /* ELITE_CHANCE */:
+              elitePoint += effect.Min;
+              break;
+            case "ItemQuantity" /* ITEM_QUANTITY */:
+              itemQuantityPercent += effect.Min;
+              break;
+            case "ItemRarity" /* ITEM_RARITY */:
+              itemRarityPercent += effect.Min;
+              break;
+          }
+        }
+      }
+      const maxCount = Math.max(1, Math.round((_WaveService.BASE_MAX + countFlat) * (1 + countPercent / 100)));
+      const spawnInterval = Math.max(_WaveService.MIN_SPAWN_INTERVAL, _WaveService.BASE_SPAWN_INTERVAL / (1 + spawnSpeedPercent / 100));
+      return {
+        MaxCount: maxCount,
+        MonsterLevel: _WaveService.BASE_MONSTER_LEVEL + monsterLevel,
+        SpawnInterval: spawnInterval,
+        HealthMult: 1 + healthPercent / 100,
+        DamageMult: 1 + damagePercent / 100,
+        SpeedMult: 1 + speedPoint / 100,
+        Resist: Math.min(75, resistPoint),
+        EliteChance: Math.max(0, Math.min(0.9, elitePoint / 100)),
+        ItemQuantityMult: 1 + itemQuantityPercent / 100,
+        ItemRarityBonus: itemRarityPercent
+      };
+    }
+    PickWeighted(items) {
+      const total = items.reduce((s, entry) => s + entry.Weight, 0);
+      let roll = Math.random() * total;
+      let picked = items[items.length - 1];
+      for (const entry of items) {
+        roll -= entry.Weight;
+        if (roll <= 0) {
+          picked = entry;
+          break;
+        }
+      }
+      return picked;
+    }
+    /** Коллапсит диапазон Min/Max в одно значение — далее везде Min === Max. */
+    RollMod(modifier) {
+      return {
+        Id: modifier.Id,
+        Weight: modifier.Weight,
+        Effects: modifier.Effects.map((e) => {
+          const value = this.RollValue(e.Min, e.Max);
+          return { Type: e.Type, ValueType: e.ValueType, Min: value, Max: value };
+        })
+      };
+    }
+    RollValue(min, max) {
+      const raw = min + Math.random() * (max - min);
+      return Math.abs(max) <= 5 ? Math.round(raw * 100) / 100 : Math.round(raw);
+    }
+  };
+  __publicField(_WaveService, "BASE_MAX", 6);
+  __publicField(_WaveService, "BASE_MONSTER_LEVEL", 1);
+  __publicField(_WaveService, "BASE_SPAWN_INTERVAL", 2);
+  __publicField(_WaveService, "MIN_SPAWN_INTERVAL", 0.3);
+  var WaveService = _WaveService;
+  var SpawnSystem = class {
+    constructor() {
+      __publicField(this, "waveService", new WaveService());
     }
     Update(deltaTime) {
       const gameState = World.SingleComponent(GameStateComponent).GameState;
       if (gameState.State == 3 /* PAUSE */ || gameState.State == 2 /* OVER */) return;
       const deathList = World.EntityQuery(SpawnEntityComponent, HealthComponent).filter((e) => World.GetComponent(e, HealthComponent).LifeCurrent <= 0);
       for (const entity of deathList) World.EntityRemove(entity);
-      let waveEntity = World.EntityFirst(SpawnComponent);
+      let spawnEntity = World.EntityFirst(SpawnComponent);
       if (gameState.State == 0 /* INIT */) {
-        if (waveEntity) {
-          World.EntityRemove(waveEntity);
-          waveEntity = null;
+        if (spawnEntity) {
+          World.EntityRemove(spawnEntity);
+          spawnEntity = null;
         }
         const entityList = World.EntityQuery(SpawnEntityComponent);
         for (const entity of entityList) World.EntityRemove(entity);
       }
-      if (waveEntity === null) waveEntity = World.EntityCreate().SetComponent(new SpawnComponent()).Entity;
-      const wave = World.GetComponent(waveEntity, SpawnComponent);
-      if (wave.DurationTimer <= 0) {
-        wave.Lvl++;
-        wave.Max = Math.min(5 + wave.Lvl * 1.5, 30);
-        wave.Current = 0;
-        wave.Killed = 0;
-        wave.SpawnTimer = 2;
-        wave.PrepareTimer = 2;
-        wave.DurationTimer = this.WAVE_DURATION;
-        return;
+      if (spawnEntity === null) {
+        spawnEntity = World.EntityCreate().SetComponent(new SpawnComponent()).Entity;
+        const created = World.GetComponent(spawnEntity, SpawnComponent);
+        created.Max = this.waveService.Stats(created.Modifiers).MaxCount;
       }
+      const wave = World.GetComponent(spawnEntity, SpawnComponent);
+      if (World.GetComponent(spawnEntity, WaveChooseComponent)) return;
       if (wave.PrepareTimer > 0) {
         wave.PrepareTimer = Math.max(0, wave.PrepareTimer - deltaTime);
         return;
       }
-      wave.DurationTimer = Math.max(0, wave.DurationTimer - deltaTime);
+      const totals = this.waveService.Stats(wave.Modifiers);
       wave.SpawnTimer -= deltaTime;
       if (wave.SpawnTimer <= 0 && wave.Current < wave.Max) {
-        this.SpawnEnemy(wave);
+        this.SpawnEnemy(wave, totals);
         wave.Current++;
-        wave.SpawnTimer = 2;
+        wave.SpawnTimer = totals.SpawnInterval;
       }
-      if (wave.Current >= wave.Max) {
-        const enemiesAlive = World.EntityQuery(SpawnEntityComponent).length;
-        if (enemiesAlive === 0) wave.DurationTimer = 0;
+      if (wave.Current >= wave.Max && World.EntityQuery(SpawnEntityComponent).length === 0) {
+        const choose = new WaveChooseComponent();
+        choose.Offers = this.waveService.RollMods(3);
+        World.SetComponent(spawnEntity, choose);
       }
     }
-    SpawnEnemy(wave) {
+    SpawnEnemy(wave, totals) {
       const entity = World.EntityCreate().SetComponent(new FractionComponent(1)).Entity;
       const spawnConfig = {
         [0 /* WARIOR */]: { BaseHP: 38, Size: 20, MoveSpeed: 20, Str: 15, Dex: 0, Int: 0 },
         [1 /* ASSASIN */]: { BaseHP: 38, Size: 20, MoveSpeed: 10, Str: 0, Dex: 15, Int: 0 },
         [2 /* MONC */]: { BaseHP: 38, Size: 20, MoveSpeed: 10, Str: 0, Dex: 0, Int: 15 }
       };
-      const bossMult = wave.Lvl % 5 === 0 && wave.Current == 0 ? 3 : 1;
+      const bossMult = wave.Lvl % 5 === 0 && wave.Current === 0 ? 3 : 1;
+      const eliteMult = Math.random() < totals.EliteChance ? 2 : 1;
+      const powerMult = bossMult * eliteMult;
       let entityType = 0 /* WARIOR */;
       const rand = Math.random();
       if (wave.Lvl > 2 && rand < 0.3) entityType = 2 /* MONC */;
       if (wave.Lvl > 4 && rand < 0.1) entityType = 1 /* ASSASIN */;
+      const monsterLevel = totals.MonsterLevel;
       const baseStats = EntityStatsService.Default();
-      baseStats.Str = spawnConfig[entityType].Str + wave.Lvl * bossMult;
-      baseStats.Dex = spawnConfig[entityType].Dex + wave.Lvl * bossMult;
-      baseStats.Int = spawnConfig[entityType].Int + wave.Lvl * bossMult;
-      baseStats.LifeMax = spawnConfig[entityType].BaseHP * bossMult;
-      baseStats.MovementSpeed = spawnConfig[entityType].MoveSpeed;
-      const equipment = this.EquipmentEnemy(wave.Lvl, baseStats.Str, baseStats.Dex, baseStats.Int);
-      const size = spawnConfig[entityType].Size + bossMult * 5;
-      const mass = 50 * bossMult;
+      baseStats.Str = (spawnConfig[entityType].Str + monsterLevel * powerMult) * totals.DamageMult;
+      baseStats.Dex = (spawnConfig[entityType].Dex + monsterLevel * powerMult) * totals.DamageMult;
+      baseStats.Int = (spawnConfig[entityType].Int + monsterLevel * powerMult) * totals.DamageMult;
+      baseStats.LifeMax = spawnConfig[entityType].BaseHP * powerMult * totals.HealthMult;
+      baseStats.MovementSpeed = spawnConfig[entityType].MoveSpeed * totals.SpeedMult;
+      baseStats.FireResist = totals.Resist;
+      baseStats.ColdResist = totals.Resist;
+      baseStats.LightResist = totals.Resist;
+      const equipment = this.EquipmentEnemy(monsterLevel, baseStats.Str, baseStats.Dex, baseStats.Int, totals);
+      const size = spawnConfig[entityType].Size + powerMult * 5;
+      const mass = 50 * powerMult;
       const rawStats = new RawStats();
       for (const item of EquipmentService.All(equipment.Equipment))
         for (const [type, value] of item.Final) rawStats.Add(EntityStatsService.AffixToRaw(type, value));
@@ -1225206,9 +1225416,9 @@ ${e?.stack || ""}</pre>
       const ehpScore = Math.sqrt(ehp) * 0.6;
       return dpsScore + ehpScore;
     }
-    EquipmentEnemy(level, str, dex, int) {
+    EquipmentEnemy(level, str, dex, int, totals) {
       const maxLevel = 50;
-      const t = Math.min(1, Math.max(0, level / maxLevel));
+      const t = Math.min(1, Math.max(0, level / maxLevel + totals.ItemRarityBonus / 100));
       const p0 = 0.7 * (1 - t) + 0.1 * t;
       const p1 = 0.9 * (1 - t) + 0.4 * t;
       let rarity = 2;
@@ -1225242,7 +1225452,7 @@ ${e?.stack || ""}</pre>
       let equippedExtra = 0;
       for (const slot of slots) {
         if (equippedExtra >= targetExtra) break;
-        if (Math.random() > slot.chance) continue;
+        if (Math.random() > Math.min(1, slot.chance * totals.ItemQuantityMult)) continue;
         const item = ItemFactory.Random(level, slot.tag, str, dex, int);
         if (item) {
           EquipmentService.Equip(equipment, item);
@@ -1225319,34 +1225529,33 @@ ${e?.stack || ""}</pre>
       }
     }
   };
-  var UI2 = class {
-    constructor(ticker) {
+  var _UI = class _UI {
+    constructor(ticker, gameStateService = new GameStateService(), waveDialog = new UIDialog("wave"), waveService = new WaveService()) {
+      this.gameStateService = gameStateService;
+      this.waveDialog = waveDialog;
+      this.waveService = waveService;
       __publicField(this, "waveNotification");
       __publicField(this, "waveNumber");
       __publicField(this, "waveSub");
       __publicField(this, "statWave");
       __publicField(this, "statEnemiesLeft");
-      __publicField(this, "statWaveTimer");
+      __publicField(this, "wasChoiceOpen", false);
       ticker.OnTick((d) => this.Refresh());
       this.waveNotification = document.getElementById("waveNotification");
       this.waveNumber = document.getElementById("waveNumber");
       this.waveSub = document.getElementById("waveSub");
       this.statWave = document.getElementById("statWave");
       this.statEnemiesLeft = document.getElementById("statEnemiesLeft");
-      this.statWaveTimer = document.getElementById("statWaveTimer");
     }
     Refresh() {
       this.ShowStats();
       this.ShowNextWave();
+      this.ShowWaveChoice();
     }
     ShowStats() {
       const waveEntity = World.EntityFirst(SpawnComponent);
       if (!waveEntity) return;
       const wave = World.GetComponent(waveEntity, SpawnComponent);
-      const displayTime = Math.max(0, Math.ceil(wave.DurationTimer));
-      this.statWaveTimer.textContent = displayTime + "\u0441";
-      this.statWaveTimer.className = "stat-value timer-value";
-      if (displayTime <= 5) this.statWaveTimer.classList.add("warning");
       const enemiesAlive = World.EntityQuery(SpawnEntityComponent).length;
       this.statWave.textContent = String(wave.Lvl || 1);
       this.statEnemiesLeft.textContent = String(enemiesAlive);
@@ -1225368,7 +1225577,101 @@ ${e?.stack || ""}</pre>
         this.waveNotification.classList.add("show");
       }
     }
+    ShowWaveChoice() {
+      const gameState = World.SingleComponent(GameStateComponent).GameState;
+      if (gameState.State === 2 /* OVER */) return;
+      const spawnEntity = World.EntityFirst(SpawnComponent, WaveChooseComponent);
+      if (this.wasChoiceOpen && !spawnEntity) {
+        this.wasChoiceOpen = false;
+        this.waveDialog.Close();
+        this.gameStateService.Resume(gameState, _UI.PAUSE_SOURCE);
+        return;
+      }
+      if (!spawnEntity) return;
+      if (this.waveDialog.Visibled) return;
+      const choose = World.GetComponent(spawnEntity, WaveChooseComponent);
+      if (choose.Offers.length === 0) return;
+      this.waveDialog.Open();
+      this.wasChoiceOpen = true;
+      this.gameStateService.Pause(gameState, _UI.PAUSE_SOURCE);
+      this.ShowOffers(spawnEntity, choose);
+    }
+    ShowOffers(spawnEntity, choose) {
+      this.waveDialog.Container.innerHTML = "";
+      const cardContainer = document.createElement("div");
+      cardContainer.className = "bonus-cards";
+      for (const mod of choose.Offers) {
+        const card = this.BuildWaveCard(mod);
+        card.addEventListener("click", () => {
+          const wave = World.GetComponent(spawnEntity, SpawnComponent);
+          wave.Modifiers.push(mod);
+          wave.Lvl++;
+          wave.Current = 0;
+          wave.Killed = 0;
+          wave.SpawnTimer = 0;
+          wave.PrepareTimer = 2;
+          wave.Max = this.waveService.Stats(wave.Modifiers).MaxCount;
+          World.RemoveComponent(spawnEntity, WaveChooseComponent);
+        });
+        cardContainer.appendChild(card);
+      }
+      this.waveDialog.Container.appendChild(cardContainer);
+    }
+    BuildWaveCard(offer) {
+      const view = _UI.WaveResources[offer.Id] ?? {
+        Icon: "\u2753",
+        Title: offer.Id,
+        Description: "\u041C\u043E\u0434\u0438\u0444\u0438\u043A\u0430\u0442\u043E\u0440 \u0432\u043E\u043B\u043D\u044B",
+        CssClass: ""
+      };
+      const effectLines = offer.Effects.map((e) => {
+        const label = _UI.WaveEffectLabels[e.Type] ?? e.Type;
+        return `<div class="wave-effect"><span class="wave-effect-label">${label}</span><span class="wave-effect-value">${this.FormatWaveEffect(e)}</span></div>`;
+      }).join("");
+      const card = document.createElement("div");
+      card.className = `bonus-card ${view.CssClass}`;
+      card.innerHTML = `
+            <div class="bonus-icon">${view.Icon}</div>
+            <div class="bonus-title">${view.Title}</div>
+            <div class="wave-effects">${effectLines}</div>
+            <div class="bonus-desc">${view.Description}</div>`;
+      return card;
+    }
+    FormatWaveEffect(effect) {
+      const sign = effect.Min >= 0 ? "+" : "";
+      if (effect.ValueType === "percent" /* PERCENT */ || effect.ValueType === "percentPoint" /* PERCENT_POINT */) return `${sign}${effect.Min}%`;
+      return `${sign}${effect.Min}`;
+    }
   };
+  __publicField(_UI, "PAUSE_SOURCE", "dialog:wave");
+  __publicField(_UI, "WaveEffectLabels", {
+    ["MonsterCount" /* MONSTER_COUNT */]: "\u041A\u043E\u043B-\u0432\u043E \u0432\u0440\u0430\u0433\u043E\u0432",
+    ["MonsterLevel" /* MONSTER_LEVEL */]: "\u0423\u0440\u043E\u0432\u0435\u043D\u044C \u043C\u043E\u043D\u0441\u0442\u0440\u043E\u0432",
+    ["MonsterHealth" /* MONSTER_HEALTH */]: "\u0417\u0434\u043E\u0440\u043E\u0432\u044C\u0435 \u043C\u043E\u043D\u0441\u0442\u0440\u043E\u0432",
+    ["MonsterDamage" /* MONSTER_DAMAGE */]: "\u0423\u0440\u043E\u043D \u043C\u043E\u043D\u0441\u0442\u0440\u043E\u0432",
+    ["MonsterSpeed" /* MONSTER_SPEED */]: "\u0421\u043A\u043E\u0440\u043E\u0441\u0442\u044C \u043C\u043E\u043D\u0441\u0442\u0440\u043E\u0432",
+    ["MonsterResist" /* MONSTER_RESIST */]: "\u0421\u043E\u043F\u0440. \u043C\u043E\u043D\u0441\u0442\u0440\u043E\u0432",
+    ["SpawnSpeed" /* SPAWN_SPEED */]: "\u0421\u043A\u043E\u0440\u043E\u0441\u0442\u044C \u0441\u043F\u0430\u0432\u043D\u0430",
+    ["EliteChance" /* ELITE_CHANCE */]: "\u0428\u0430\u043D\u0441 \u044D\u043B\u0438\u0442\u044B",
+    ["ItemQuantity" /* ITEM_QUANTITY */]: "\u041A\u043E\u043B-\u0432\u043E \u043F\u0440\u0435\u0434\u043C\u0435\u0442\u043E\u0432",
+    ["ItemRarity" /* ITEM_RARITY */]: "\u0420\u0435\u0434\u043A\u043E\u0441\u0442\u044C \u043F\u0440\u0435\u0434\u043C\u0435\u0442\u043E\u0432"
+  });
+  __publicField(_UI, "WaveResources", {
+    horde: { Icon: "\u{1F465}", Title: "\u041E\u0440\u0434\u0430", Description: "\u0412 \u0432\u043E\u043B\u043D\u0435 \u0437\u0430\u043C\u0435\u0442\u043D\u043E \u0431\u043E\u043B\u044C\u0448\u0435 \u0432\u0440\u0430\u0433\u043E\u0432", CssClass: "dmg" },
+    legion: { Icon: "\u{1F465}", Title: "\u041B\u0435\u0433\u0438\u043E\u043D", Description: "\u041A \u0432\u043E\u043B\u043D\u0435 \u0434\u043E\u0431\u0430\u0432\u043B\u044F\u044E\u0442\u0441\u044F \u043D\u043E\u0432\u044B\u0435 \u0432\u0440\u0430\u0433\u0438", CssClass: "dmg" },
+    veterans: { Icon: "\u2B06\uFE0F", Title: "\u0412\u0435\u0442\u0435\u0440\u0430\u043D\u044B", Description: "\u041C\u043E\u043D\u0441\u0442\u0440\u044B \u043F\u0440\u0438\u0445\u043E\u0434\u044F\u0442 \u0431\u043E\u043B\u0435\u0435 \u0432\u044B\u0441\u043E\u043A\u043E\u0433\u043E \u0443\u0440\u043E\u0432\u043D\u044F", CssClass: "crit" },
+    toughened: { Icon: "\u{1F6E1}\uFE0F", Title: "\u0417\u0430\u043A\u0430\u043B\u0451\u043D\u043D\u044B\u0435", Description: "\u0423 \u043C\u043E\u043D\u0441\u0442\u0440\u043E\u0432 \u0431\u043E\u043B\u044C\u0448\u0435 \u0437\u0434\u043E\u0440\u043E\u0432\u044C\u044F", CssClass: "def" },
+    savage: { Icon: "\u2694\uFE0F", Title: "\u0421\u0432\u0438\u0440\u0435\u043F\u043E\u0441\u0442\u044C", Description: "\u041C\u043E\u043D\u0441\u0442\u0440\u044B \u043D\u0430\u043D\u043E\u0441\u044F\u0442 \u0431\u043E\u043B\u044C\u0448\u0435 \u0443\u0440\u043E\u043D\u0430", CssClass: "fire" },
+    swift: { Icon: "\u{1F4A8}", Title: "\u0421\u0442\u0440\u0435\u043C\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0435", Description: "\u041C\u043E\u043D\u0441\u0442\u0440\u044B \u0431\u044B\u0441\u0442\u0440\u0435\u0435, \u0430 \u0441\u043F\u0430\u0432\u043D \u0447\u0430\u0449\u0435", CssClass: "spd" },
+    surge: { Icon: "\u26A1", Title: "\u041F\u0440\u043E\u0440\u044B\u0432", Description: "\u0412\u0440\u0430\u0433\u0438 \u043F\u043E\u044F\u0432\u043B\u044F\u044E\u0442\u0441\u044F \u043F\u043E\u0447\u0442\u0438 \u0431\u0435\u0437 \u043F\u0430\u0443\u0437\u044B", CssClass: "spd" },
+    warded: { Icon: "\u{1F537}", Title: "\u0417\u0430\u0449\u0438\u0449\u0451\u043D\u043D\u044B\u0435", Description: "\u0423 \u043C\u043E\u043D\u0441\u0442\u0440\u043E\u0432 \u0432\u044B\u0448\u0435 \u0441\u043E\u043F\u0440\u043E\u0442\u0438\u0432\u043B\u0435\u043D\u0438\u044F", CssClass: "res" },
+    greed: { Icon: "\u{1F4B0}", Title: "\u0410\u043B\u0447\u043D\u043E\u0441\u0442\u044C", Description: "\u0411\u043E\u043B\u044C\u0448\u0435 \u0432\u0440\u0430\u0433\u043E\u0432 \u0438 \u0431\u043E\u043B\u044C\u0448\u0435 \u0434\u043E\u0431\u044B\u0447\u0438", CssClass: "light" },
+    avidity: { Icon: "\u{1F48E}", Title: "\u0416\u0430\u0434\u043D\u043E\u0441\u0442\u044C", Description: "\u0411\u043E\u043B\u044C\u0448\u0435 \u0438 \u043A\u0430\u0447\u0435\u0441\u0442\u0432\u0435\u043D\u043D\u0435\u0435 \u0434\u043E\u0431\u044B\u0447\u0430", CssClass: "light" },
+    elite: { Icon: "\u2B50", Title: "\u042D\u043B\u0438\u0442\u0430", Description: "\u0412\u044B\u0448\u0435 \u0448\u0430\u043D\u0441 \u044D\u043B\u0438\u0442\u043D\u043E\u0433\u043E \u043C\u043E\u043D\u0441\u0442\u0440\u0430", CssClass: "crit" },
+    cursed: { Icon: "\u2620\uFE0F", Title: "\u041F\u0440\u043E\u043A\u043B\u044F\u0442\u044B\u0435", Description: "\u041A\u0440\u0435\u043F\u043A\u0438\u0435 \u0438 \u0441\u0442\u043E\u0439\u043A\u0438\u0435 \u043C\u043E\u043D\u0441\u0442\u0440\u044B", CssClass: "res" },
+    bloodlust: { Icon: "\u{1FA78}", Title: "\u041A\u0440\u043E\u0432\u0430\u0432\u0430\u044F \u0436\u0430\u0436\u0434\u0430", Description: "\u0416\u0435\u0441\u0442\u043E\u043A\u0438\u0435 \u0438 \u0447\u0430\u0441\u0442\u044B\u0435 \u0432\u0440\u0430\u0433\u0438", CssClass: "fire" }
+  });
+  var UI2 = _UI;
   function InitSpawnModule(ticker) {
     World.SystemAdd(new SpawnSystem());
     Graphics.RendererAdd(new SpawnRenderer());
@@ -1225525,10 +1225828,8 @@ ${e?.stack || ""}</pre>
       { type: "Accuracy", mod: "flat", min: 6, max: 16, weight: 0.9 },
       { type: "CriticalChance", mod: "percentPoint", min: 2, max: 5, weight: 0.5 },
       { type: "CriticalMultiplier", mod: "flat", min: 0.1, max: 0.4, weight: 0.5 },
-      { type: "StunInc", mod: "percent", min: 10, max: 25, weight: 0.7 },
-      { type: "StunInc", mod: "percentPoint", min: 3, max: 8, weight: 0.6 },
-      { type: "StunReduction", mod: "percent", min: 10, max: 25, weight: 0.7 },
-      { type: "StunReduction", mod: "percentPoint", min: 3, max: 8, weight: 0.6 },
+      { type: "Stun", mod: "flat", min: 10, max: 25, weight: 0.7 },
+      { type: "StunReduction", mod: "flat", min: 10, max: 25, weight: 0.7 },
       { type: "PhysReflect", mod: "percent", min: 5, max: 15, weight: 0.6 },
       { type: "PhysReflect", mod: "flat", min: 3, max: 8, weight: 0.5 },
       { type: "PhysReduction", mod: "percent", min: 3, max: 8, weight: 0.6 },
@@ -1225699,11 +1226000,7 @@ ${e?.stack || ""}</pre>
       return picked;
     }
     BuildSimple(e) {
-      return {
-        Id: `${e.type}:${e.mod}`,
-        Primary: { Type: e.type, Mod: e.mod, Value: this.RollValue(e.min, e.max) },
-        IsKeystone: false
-      };
+      return { Id: `${e.type}:${e.mod}`, Primary: { Type: e.type, Mod: e.mod, Value: this.RollValue(e.min, e.max) }, IsKeystone: false };
     }
     BuildKeystone(k) {
       return {
@@ -1225728,179 +1226025,181 @@ ${e?.stack || ""}</pre>
   };
   __publicField(_BonusSystem, "KEYSTONE_CHANCE", 0.15);
   var BonusSystem = _BonusSystem;
-  var BonusStatResources = {
-    "Str:flat": { Icon: "\u{1F4AA}", Title: "\u0421\u0438\u043B\u0430", Unit: "STR", Description: "\u0414\u043E\u0431\u0430\u0432\u043B\u044F\u0435\u0442 \u0441\u0438\u043B\u0443", CssClass: "str" },
-    "Dex:flat": { Icon: "\u{1F3F9}", Title: "\u041B\u043E\u0432\u043A\u043E\u0441\u0442\u044C", Unit: "DEX", Description: "\u0414\u043E\u0431\u0430\u0432\u043B\u044F\u0435\u0442 \u043B\u043E\u0432\u043A\u043E\u0441\u0442\u044C", CssClass: "dex" },
-    "Int:flat": { Icon: "\u{1F52E}", Title: "\u0418\u043D\u0442\u0435\u043B\u043B\u0435\u043A\u0442", Unit: "INT", Description: "\u0414\u043E\u0431\u0430\u0432\u043B\u044F\u0435\u0442 \u0438\u043D\u0442\u0435\u043B\u043B\u0435\u043A\u0442", CssClass: "int" },
-    "LifeMax:flat": { Icon: "\u2764\uFE0F", Title: "\u0417\u0434\u043E\u0440\u043E\u0432\u044C\u0435", Unit: "HP", Description: "\u041A \u043C\u0430\u043A\u0441\u0438\u043C\u0443\u043C\u0443 \u0437\u0434\u043E\u0440\u043E\u0432\u044C\u044F", CssClass: "hp" },
-    "LifeMax:percent": { Icon: "\u2764\uFE0F", Title: "\u041F\u0440\u0438\u0440\u043E\u0441\u0442 \u0437\u0434\u043E\u0440\u043E\u0432\u044C\u044F", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u043C\u0430\u043A\u0441\u0438\u043C\u0443\u043C\u0430 \u0437\u0434\u043E\u0440\u043E\u0432\u044C\u044F", CssClass: "hp" },
-    "LifePerSecond:flat": { Icon: "\u{1F49A}", Title: "\u0420\u0435\u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u044F", Unit: "HP/s", Description: "\u0420\u0435\u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u044F \u0437\u0434\u043E\u0440\u043E\u0432\u044C\u044F \u0432 \u0441\u0435\u043A\u0443\u043D\u0434\u0443", CssClass: "hp" },
-    "LifePerKill:flat": { Icon: "\u{1FA78}", Title: "\u0417\u0434\u043E\u0440\u043E\u0432\u044C\u0435 \u0437\u0430 \u0443\u0431\u0438\u0439\u0441\u0442\u0432\u043E", Unit: "HP", Description: "\u041A \u0437\u0434\u043E\u0440\u043E\u0432\u044C\u044E \u0437\u0430 \u0443\u0431\u0438\u0439\u0441\u0442\u0432\u043E", CssClass: "hp" },
-    "Armour:flat": { Icon: "\u{1F6E1}\uFE0F", Title: "\u0411\u0440\u043E\u043D\u044F", Unit: "AR", Description: "\u041A \u0431\u0440\u043E\u043D\u0435", CssClass: "def" },
-    "Armour:percent": { Icon: "\u{1F6E1}\uFE0F", Title: "\u0423\u043A\u0440\u0435\u043F\u043B\u0435\u043D\u0438\u0435 \u0431\u0440\u043E\u043D\u0438", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0431\u0440\u043E\u043D\u0438", CssClass: "def" },
-    "Evasion:flat": { Icon: "\u{1F4A8}", Title: "\u0423\u043A\u043B\u043E\u043D\u0435\u043D\u0438\u0435", Unit: "EV", Description: "\u041A \u0443\u043A\u043B\u043E\u043D\u0435\u043D\u0438\u044E", CssClass: "def" },
-    "Evasion:percent": { Icon: "\u{1F4A8}", Title: "\u041B\u043E\u0432\u043A\u043E\u0441\u0442\u044C \u0432 \u0437\u0430\u0449\u0438\u0442\u0435", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0443\u043A\u043B\u043E\u043D\u0435\u043D\u0438\u044F", CssClass: "def" },
-    "ES:flat": { Icon: "\u{1F537}", Title: "\u042D\u043D\u0435\u0440\u0433\u043E\u0449\u0438\u0442", Unit: "ES", Description: "\u041A \u044D\u043D\u0435\u0440\u0433\u043E\u0449\u0438\u0442\u0443", CssClass: "def" },
-    "ES:percent": { Icon: "\u{1F537}", Title: "\u0423\u0441\u0438\u043B\u0435\u043D\u0438\u0435 \u0449\u0438\u0442\u0430", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u044D\u043D\u0435\u0440\u0433\u043E\u0449\u0438\u0442\u0430", CssClass: "def" },
-    "FireResist:percentPoint": { Icon: "\u{1F525}", Title: "\u0421\u043E\u043F\u0440. \u043E\u0433\u043D\u044E", Unit: "%", Description: "\u041A \u0441\u043E\u043F\u0440\u043E\u0442\u0438\u0432\u043B\u0435\u043D\u0438\u044E \u043E\u0433\u043D\u044E", CssClass: "res" },
-    "ColdResist:percentPoint": { Icon: "\u2744\uFE0F", Title: "\u0421\u043E\u043F\u0440. \u0445\u043E\u043B\u043E\u0434\u0443", Unit: "%", Description: "\u041A \u0441\u043E\u043F\u0440\u043E\u0442\u0438\u0432\u043B\u0435\u043D\u0438\u044E \u0445\u043E\u043B\u043E\u0434\u0443", CssClass: "res" },
-    "LightResist:percentPoint": { Icon: "\u26A1", Title: "\u0421\u043E\u043F\u0440. \u043C\u043E\u043B\u043D\u0438\u0438", Unit: "%", Description: "\u041A \u0441\u043E\u043F\u0440\u043E\u0442\u0438\u0432\u043B\u0435\u043D\u0438\u044E \u043C\u043E\u043B\u043D\u0438\u0438", CssClass: "res" },
-    "PhysDamage:percent": { Icon: "\u2694\uFE0F", Title: "\u0424\u0438\u0437\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u0443\u0440\u043E\u043D", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0444\u0438\u0437\u0438\u0447\u0435\u0441\u043A\u043E\u0433\u043E \u0443\u0440\u043E\u043D\u0430", CssClass: "dmg" },
-    "FireDamage:percent": { Icon: "\u{1F525}", Title: "\u0423\u0440\u043E\u043D \u043E\u0433\u043D\u0435\u043C", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0443\u0440\u043E\u043D\u0430 \u043E\u0433\u043D\u0451\u043C", CssClass: "fire" },
-    "ColdDamage:percent": { Icon: "\u2744\uFE0F", Title: "\u0423\u0440\u043E\u043D \u0445\u043E\u043B\u043E\u0434\u043E\u043C", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0443\u0440\u043E\u043D\u0430 \u0445\u043E\u043B\u043E\u0434\u043E\u043C", CssClass: "cold" },
-    "LightDamage:percent": { Icon: "\u26A1", Title: "\u0423\u0440\u043E\u043D \u043C\u043E\u043B\u043D\u0438\u0435\u0439", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0443\u0440\u043E\u043D\u0430 \u043C\u043E\u043B\u043D\u0438\u0435\u0439", CssClass: "light" },
-    "AttackSpeed:percent": { Icon: "\u26A1", Title: "\u0421\u043A\u043E\u0440\u043E\u0441\u0442\u044C \u0430\u0442\u0430\u043A\u0438", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0441\u043A\u043E\u0440\u043E\u0441\u0442\u0438 \u0430\u0442\u0430\u043A\u0438", CssClass: "spd" },
-    "AttackRange:percent": { Icon: "\u{1F3AF}", Title: "\u0420\u0430\u0434\u0438\u0443\u0441 \u0430\u0442\u0430\u043A\u0438", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0440\u0430\u0434\u0438\u0443\u0441\u0430 \u0430\u0442\u0430\u043A\u0438", CssClass: "spd" },
-    "MovementSpeed:percentPoint": { Icon: "\u{1F3C3}", Title: "\u0421\u043A\u043E\u0440\u043E\u0441\u0442\u044C \u0431\u0435\u0433\u0430", Unit: "%", Description: "\u041A \u0441\u043A\u043E\u0440\u043E\u0441\u0442\u0438 \u043F\u0435\u0440\u0435\u0434\u0432\u0438\u0436\u0435\u043D\u0438\u044F", CssClass: "spd" },
-    "Accuracy:flat": { Icon: "\u{1F3AF}", Title: "\u041C\u0435\u0442\u043A\u043E\u0441\u0442\u044C", Unit: "ACC", Description: "\u041A \u043C\u0435\u0442\u043A\u043E\u0441\u0442\u0438", CssClass: "spd" },
-    "CriticalChance:percentPoint": { Icon: "\u{1F4A5}", Title: "\u0428\u0430\u043D\u0441 \u043A\u0440\u0438\u0442\u0430", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0430\u0435\u0442 \u0448\u0430\u043D\u0441 \u043A\u0440\u0438\u0442\u0438\u0447\u0435\u0441\u043A\u043E\u0433\u043E \u0443\u0434\u0430\u0440\u0430", CssClass: "crit" },
-    "CriticalMultiplier:flat": { Icon: "\u{1F4A5}", Title: "\u041C\u043D\u043E\u0436\u0438\u0442\u0435\u043B\u044C \u043A\u0440\u0438\u0442\u0430", Unit: "x", Description: "\u0423\u0441\u0438\u043B\u0438\u0432\u0430\u0435\u0442 \u043A\u0440\u0438\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u0443\u0440\u043E\u043D", CssClass: "crit" },
-    // ─── Percent-версии статов (Str/Dex/Int) ───
-    "Str:percent": { Icon: "\u{1F4AA}", Title: "\u0421\u0438\u043B\u0430", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0441\u0438\u043B\u044B", CssClass: "str" },
-    "Dex:percent": { Icon: "\u{1F3F9}", Title: "\u041B\u043E\u0432\u043A\u043E\u0441\u0442\u044C", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u043B\u043E\u0432\u043A\u043E\u0441\u0442\u0438", CssClass: "dex" },
-    "Int:percent": { Icon: "\u{1F52E}", Title: "\u0418\u043D\u0442\u0435\u043B\u043B\u0435\u043A\u0442", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0438\u043D\u0442\u0435\u043B\u043B\u0435\u043A\u0442\u0430", CssClass: "int" },
-    // ─── Energy Shield (регенерация) ───
-    "ESRegenDelay:percent": { Icon: "\u23F3", Title: "\u0417\u0430\u0434\u0435\u0440\u0436\u043A\u0430 \u0449\u0438\u0442\u0430", Unit: "%", Description: "\u0421\u043E\u043A\u0440\u0430\u0449\u0430\u0435\u0442 \u0437\u0430\u0434\u0435\u0440\u0436\u043A\u0443 \u043F\u0435\u0440\u0435\u0434 \u0440\u0435\u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u0435\u0439 \u044D\u043D\u0435\u0440\u0433\u043E\u0449\u0438\u0442\u0430", CssClass: "def" },
-    "ESRegenRate:percent": { Icon: "\u{1F537}", Title: "\u0421\u043A\u043E\u0440\u043E\u0441\u0442\u044C \u0440\u0435\u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u0438 \u0449\u0438\u0442\u0430", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0441\u043A\u043E\u0440\u043E\u0441\u0442\u0438 \u0440\u0435\u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u0438 \u044D\u043D\u0435\u0440\u0433\u043E\u0449\u0438\u0442\u0430", CssClass: "def" },
-    "ESRegenRate:flat": { Icon: "\u{1F537}", Title: "\u0420\u0435\u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u044F \u0449\u0438\u0442\u0430", Unit: "ES/s", Description: "\u0420\u0435\u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u044F \u044D\u043D\u0435\u0440\u0433\u043E\u0449\u0438\u0442\u0430 \u0432 \u0441\u0435\u043A\u0443\u043D\u0434\u0443", CssClass: "def" },
-    // ─── Stun ───
-    "StunInc:percent": { Icon: "\u{1F4AB}", Title: "\u0423\u0432\u0435\u043B\u0438\u0447\u0435\u043D\u0438\u0435 \u043E\u0433\u043B\u0443\u0448\u0435\u043D\u0438\u044F", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0434\u043B\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0441\u0442\u0438 \u043E\u0433\u043B\u0443\u0448\u0435\u043D\u0438\u044F", CssClass: "crit" },
-    "StunInc:percentPoint": { Icon: "\u{1F4AB}", Title: "\u0428\u0430\u043D\u0441 \u043E\u0433\u043B\u0443\u0448\u0435\u043D\u0438\u044F", Unit: "%", Description: "\u041A \u0448\u0430\u043D\u0441\u0443 \u043E\u0433\u043B\u0443\u0448\u0438\u0442\u044C \u0432\u0440\u0430\u0433\u0430", CssClass: "crit" },
-    "StunReduction:percent": { Icon: "\u{1F4AB}", Title: "\u0421\u043E\u043F\u0440\u043E\u0442\u0438\u0432\u043B\u0435\u043D\u0438\u0435 \u043E\u0433\u043B\u0443\u0448\u0435\u043D\u0438\u044E", Unit: "%", Description: "\u0421\u043D\u0438\u0436\u0435\u043D\u0438\u0435 \u0434\u043B\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0441\u0442\u0438 \u043E\u0433\u043B\u0443\u0448\u0435\u043D\u0438\u044F", CssClass: "def" },
-    "StunReduction:percentPoint": { Icon: "\u{1F4AB}", Title: "\u0417\u0430\u0449\u0438\u0442\u0430 \u043E\u0442 \u043E\u0433\u043B\u0443\u0448\u0435\u043D\u0438\u044F", Unit: "%", Description: "\u041A \u0441\u043E\u043F\u0440\u043E\u0442\u0438\u0432\u043B\u0435\u043D\u0438\u044E \u043E\u0433\u043B\u0443\u0448\u0435\u043D\u0438\u044E", CssClass: "def" },
-    // ─── Reflect / Reduction / Block ───
-    "PhysReflect:percent": { Icon: "\u{1F994}", Title: "\u041E\u0442\u0440\u0430\u0436\u0435\u043D\u0438\u0435 \u0443\u0440\u043E\u043D\u0430", Unit: "%", Description: "\u041E\u0442\u0440\u0430\u0436\u0430\u0435\u0442 \u0447\u0430\u0441\u0442\u044C \u0444\u0438\u0437\u0438\u0447\u0435\u0441\u043A\u043E\u0433\u043E \u0443\u0440\u043E\u043D\u0430", CssClass: "dmg" },
-    "PhysReflect:flat": { Icon: "\u{1F994}", Title: "\u041E\u0442\u0440\u0430\u0436\u0435\u043D\u0438\u0435 \u0443\u0440\u043E\u043D\u0430", Unit: "DMG", Description: "\u041E\u0442\u0440\u0430\u0436\u0430\u0435\u0442 \u0444\u0438\u0437\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u0443\u0440\u043E\u043D", CssClass: "dmg" },
-    "PhysReduction:percent": { Icon: "\u{1F6E1}\uFE0F", Title: "\u0421\u043D\u0438\u0436\u0435\u043D\u0438\u0435 \u0444\u0438\u0437. \u0443\u0440\u043E\u043D\u0430", Unit: "%", Description: "\u0421\u043D\u0438\u0436\u0430\u0435\u0442 \u043F\u043E\u043B\u0443\u0447\u0430\u0435\u043C\u044B\u0439 \u0444\u0438\u0437\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u0443\u0440\u043E\u043D", CssClass: "def" },
-    "Block:percent": { Icon: "\u{1F9F1}", Title: "\u0411\u043B\u043E\u043A", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u044D\u0444\u0444\u0435\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u0438 \u0431\u043B\u043E\u043A\u0430", CssClass: "def" },
-    "Block:percentPoint": { Icon: "\u{1F9F1}", Title: "\u0428\u0430\u043D\u0441 \u0431\u043B\u043E\u043A\u0430", Unit: "%", Description: "\u041A \u0448\u0430\u043D\u0441\u0443 \u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0430\u0442\u0430\u043A\u0443", CssClass: "def" }
-  };
-  var BonusKeystoneResources = {
-    blood_and_sand: {
-      Icon: "\u{1FA78}",
-      Title: "\u041A\u0440\u043E\u0432\u044C \u0438 \u043F\u0435\u0441\u043E\u043A",
-      Unit: "",
-      Description: "\u041E\u0433\u0440\u043E\u043C\u043D\u044B\u0439 \u0444\u0438\u0437\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u0443\u0440\u043E\u043D \u0446\u0435\u043D\u043E\u0439 \u0436\u0438\u0432\u0443\u0447\u0435\u0441\u0442\u0438",
-      CssClass: "dmg"
-    },
-    glass_cannon: {
-      Icon: "\u{1F4A5}",
-      Title: "\u0421\u0442\u0435\u043A\u043B\u044F\u043D\u043D\u0430\u044F \u043F\u0443\u0448\u043A\u0430",
-      Unit: "",
-      Description: "\u0421\u0442\u0438\u0445\u0438\u0438 \u0431\u044C\u044E\u0442 \u0441\u0438\u043B\u044C\u043D\u0435\u0435, \u043D\u043E \u0431\u0440\u043E\u043D\u044F \u0442\u0430\u0435\u0442",
-      CssClass: "dmg"
-    },
-    berserker_rage: {
-      Icon: "\u{1F525}",
-      Title: "\u042F\u0440\u043E\u0441\u0442\u044C \u0431\u0435\u0440\u0441\u0435\u0440\u043A\u0430",
-      Unit: "",
-      Description: "\u0421\u043A\u043E\u0440\u043E\u0441\u0442\u044C \u0430\u0442\u0430\u043A\u0438 \u0432 \u043E\u0431\u043C\u0435\u043D \u043D\u0430 \u0441\u043E\u043F\u0440\u043E\u0442\u0438\u0432\u043B\u0435\u043D\u0438\u044F",
-      CssClass: "spd"
-    },
-    heavy_armour: {
-      Icon: "\u{1F6E1}\uFE0F",
-      Title: "\u0422\u044F\u0436\u0451\u043B\u044B\u0439 \u0434\u043E\u0441\u043F\u0435\u0445",
-      Unit: "",
-      Description: "\u041C\u0430\u043A\u0441\u0438\u043C\u0443\u043C \u0431\u0440\u043E\u043D\u0438, \u043C\u0438\u043D\u0438\u043C\u0443\u043C \u043C\u043E\u0431\u0438\u043B\u044C\u043D\u043E\u0441\u0442\u0438",
-      CssClass: "def"
-    },
-    light_step: {
-      Icon: "\u{1F4A8}",
-      Title: "\u041B\u0451\u0433\u043A\u0438\u0439 \u0448\u0430\u0433",
-      Unit: "",
-      Description: "\u0423\u043A\u043B\u043E\u043D\u0435\u043D\u0438\u0435 \u0432 \u043E\u0431\u043C\u0435\u043D \u043D\u0430 \u0431\u0440\u043E\u043D\u044E",
-      CssClass: "def"
-    },
-    crystal_heart: {
-      Icon: "\u{1F537}",
-      Title: "\u041A\u0440\u0438\u0441\u0442\u0430\u043B\u044C\u043D\u043E\u0435 \u0441\u0435\u0440\u0434\u0446\u0435",
-      Unit: "",
-      Description: "\u041E\u0433\u0440\u043E\u043C\u043D\u044B\u0439 \u044D\u043D\u0435\u0440\u0433\u043E\u0449\u0438\u0442 \u0446\u0435\u043D\u043E\u0439 \u0437\u0434\u043E\u0440\u043E\u0432\u044C\u044F",
-      CssClass: "def"
-    },
-    pyromancer: {
-      Icon: "\u{1F525}",
-      Title: "\u041F\u0438\u0440\u043E\u043C\u0430\u043D\u0442",
-      Unit: "",
-      Description: "\u041E\u0433\u043E\u043D\u044C \u0441\u0438\u043B\u044C\u043D\u0435\u0435, \u0445\u043E\u043B\u043E\u0434 \u0441\u043B\u0430\u0431\u0435\u0435",
-      CssClass: "fire"
-    },
-    cryomancer: {
-      Icon: "\u2744\uFE0F",
-      Title: "\u041A\u0440\u0438\u043E\u043C\u0430\u043D\u0442",
-      Unit: "",
-      Description: "\u0425\u043E\u043B\u043E\u0434 \u0441\u0438\u043B\u044C\u043D\u0435\u0435, \u043E\u0433\u043E\u043D\u044C \u0441\u043B\u0430\u0431\u0435\u0435",
-      CssClass: "cold"
-    },
-    electromancer: {
-      Icon: "\u26A1",
-      Title: "\u042D\u043B\u0435\u043A\u0442\u0440\u043E\u043C\u0430\u043D\u0442",
-      Unit: "",
-      Description: "\u041C\u043E\u043B\u043D\u0438\u044F \u0441\u0438\u043B\u044C\u043D\u0435\u0435, \u043E\u0433\u043E\u043D\u044C \u0441\u043B\u0430\u0431\u0435\u0435",
-      CssClass: "light"
-    },
-    double_strike: {
-      Icon: "\u2694\uFE0F",
-      Title: "\u0414\u0432\u043E\u0439\u043D\u043E\u0439 \u0443\u0434\u0430\u0440",
-      Unit: "",
-      Description: "\u0421\u043A\u043E\u0440\u043E\u0441\u0442\u044C \u0430\u0442\u0430\u043A\u0438 \u0432 \u043E\u0431\u043C\u0435\u043D \u043D\u0430 \u0441\u0438\u043B\u0443 \u0443\u0434\u0430\u0440\u0430",
-      CssClass: "spd"
-    },
-    glass_resist: {
-      Icon: "\u{1F4A0}",
-      Title: "\u0425\u0440\u0443\u043F\u043A\u043E\u0441\u0442\u044C \u0441\u0442\u0438\u0445\u0438\u0439",
-      Unit: "",
-      Description: "\u0421\u043E\u043F\u0440\u043E\u0442\u0438\u0432\u043B\u0435\u043D\u0438\u044F \u0432 \u043E\u0431\u043C\u0435\u043D \u043D\u0430 \u0437\u0434\u043E\u0440\u043E\u0432\u044C\u0435",
-      CssClass: "res"
-    },
-    crit_lord: {
-      Icon: "\u{1F4A5}",
-      Title: "\u0412\u043B\u0430\u0434\u044B\u043A\u0430 \u043A\u0440\u0438\u0442\u043E\u0432",
-      Unit: "",
-      Description: "\u041A\u0440\u0438\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u0443\u0440\u043E\u043D \u0432 \u043E\u0431\u043C\u0435\u043D \u043D\u0430 \u0441\u043A\u043E\u0440\u043E\u0441\u0442\u044C",
-      CssClass: "crit"
-    },
-    precision_strike: {
-      Icon: "\u{1F3AF}",
-      Title: "\u0422\u043E\u0447\u043D\u044B\u0439 \u0443\u0434\u0430\u0440",
-      Unit: "",
-      Description: "\u0422\u043E\u0447\u043D\u043E\u0441\u0442\u044C \u0438 \u043A\u0440\u0438\u0442 \u0432 \u043E\u0431\u043C\u0435\u043D \u043D\u0430 \u0443\u0440\u043E\u043D",
-      CssClass: "crit"
-    },
-    thorned_hide: {
-      Icon: "\u{1F335}",
-      Title: "\u0422\u0435\u0440\u043D\u043E\u0432\u0430\u044F \u043A\u043E\u0436\u0430",
-      Unit: "",
-      Description: "\u041E\u0442\u0440\u0430\u0436\u0430\u0435\u0442 \u0443\u0440\u043E\u043D \u0446\u0435\u043D\u043E\u0439 \u0437\u0434\u043E\u0440\u043E\u0432\u044C\u044F",
-      CssClass: "dmg"
-    },
-    stun_lord: {
-      Icon: "\u{1F4AB}",
-      Title: "\u0412\u043B\u0430\u0434\u044B\u043A\u0430 \u043E\u0433\u043B\u0443\u0448\u0435\u043D\u0438\u044F",
-      Unit: "",
-      Description: "\u041E\u0433\u043B\u0443\u0448\u0435\u043D\u0438\u0435 \u0432 \u043E\u0431\u043C\u0435\u043D \u043D\u0430 \u0441\u043A\u043E\u0440\u043E\u0441\u0442\u044C \u0430\u0442\u0430\u043A\u0438",
-      CssClass: "crit"
-    },
-    block_master: {
-      Icon: "\u{1F9F1}",
-      Title: "\u041C\u0430\u0441\u0442\u0435\u0440 \u0431\u043B\u043E\u043A\u0430",
-      Unit: "",
-      Description: "\u0411\u043B\u043E\u043A \u0432 \u043E\u0431\u043C\u0435\u043D \u043D\u0430 \u0443\u043A\u043B\u043E\u043D\u0435\u043D\u0438\u0435",
-      CssClass: "def"
-    },
-    es_overflow: {
-      Icon: "\u{1F537}",
-      Title: "\u041F\u0435\u0440\u0435\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u0435 \u0449\u0438\u0442\u0430",
-      Unit: "",
-      Description: "\u0420\u0435\u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u044F \u0449\u0438\u0442\u0430 \u0432 \u043E\u0431\u043C\u0435\u043D \u043D\u0430 \u0435\u0433\u043E \u0437\u0430\u043F\u0430\u0441",
-      CssClass: "def"
-    }
-  };
-  var _UI = class _UI {
+  var _UI2 = class _UI2 {
     constructor(ticker, gameStateService = new GameStateService(), dialog = new UIDialog("levelup")) {
       this.ticker = ticker;
       this.gameStateService = gameStateService;
       this.dialog = dialog;
+      __publicField(this, "bonusStatResources", {
+        "Str:flat": { Icon: "\u{1F4AA}", Title: "\u0421\u0438\u043B\u0430", Unit: "STR", Description: "\u0414\u043E\u0431\u0430\u0432\u043B\u044F\u0435\u0442 \u0441\u0438\u043B\u0443", CssClass: "str" },
+        "Dex:flat": { Icon: "\u{1F3F9}", Title: "\u041B\u043E\u0432\u043A\u043E\u0441\u0442\u044C", Unit: "DEX", Description: "\u0414\u043E\u0431\u0430\u0432\u043B\u044F\u0435\u0442 \u043B\u043E\u0432\u043A\u043E\u0441\u0442\u044C", CssClass: "dex" },
+        "Int:flat": { Icon: "\u{1F52E}", Title: "\u0418\u043D\u0442\u0435\u043B\u043B\u0435\u043A\u0442", Unit: "INT", Description: "\u0414\u043E\u0431\u0430\u0432\u043B\u044F\u0435\u0442 \u0438\u043D\u0442\u0435\u043B\u043B\u0435\u043A\u0442", CssClass: "int" },
+        "LifeMax:flat": { Icon: "\u2764\uFE0F", Title: "\u0417\u0434\u043E\u0440\u043E\u0432\u044C\u0435", Unit: "HP", Description: "\u041A \u043C\u0430\u043A\u0441\u0438\u043C\u0443\u043C\u0443 \u0437\u0434\u043E\u0440\u043E\u0432\u044C\u044F", CssClass: "hp" },
+        "LifeMax:percent": { Icon: "\u2764\uFE0F", Title: "\u041F\u0440\u0438\u0440\u043E\u0441\u0442 \u0437\u0434\u043E\u0440\u043E\u0432\u044C\u044F", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u043C\u0430\u043A\u0441\u0438\u043C\u0443\u043C\u0430 \u0437\u0434\u043E\u0440\u043E\u0432\u044C\u044F", CssClass: "hp" },
+        "LifePerSecond:flat": { Icon: "\u{1F49A}", Title: "\u0420\u0435\u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u044F", Unit: "HP/s", Description: "\u0420\u0435\u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u044F \u0437\u0434\u043E\u0440\u043E\u0432\u044C\u044F \u0432 \u0441\u0435\u043A\u0443\u043D\u0434\u0443", CssClass: "hp" },
+        "LifePerKill:flat": { Icon: "\u{1FA78}", Title: "\u0417\u0434\u043E\u0440\u043E\u0432\u044C\u0435 \u0437\u0430 \u0443\u0431\u0438\u0439\u0441\u0442\u0432\u043E", Unit: "HP", Description: "\u041A \u0437\u0434\u043E\u0440\u043E\u0432\u044C\u044E \u0437\u0430 \u0443\u0431\u0438\u0439\u0441\u0442\u0432\u043E", CssClass: "hp" },
+        "Armour:flat": { Icon: "\u{1F6E1}\uFE0F", Title: "\u0411\u0440\u043E\u043D\u044F", Unit: "AR", Description: "\u041A \u0431\u0440\u043E\u043D\u0435", CssClass: "def" },
+        "Armour:percent": { Icon: "\u{1F6E1}\uFE0F", Title: "\u0423\u043A\u0440\u0435\u043F\u043B\u0435\u043D\u0438\u0435 \u0431\u0440\u043E\u043D\u0438", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0431\u0440\u043E\u043D\u0438", CssClass: "def" },
+        "Evasion:flat": { Icon: "\u{1F4A8}", Title: "\u0423\u043A\u043B\u043E\u043D\u0435\u043D\u0438\u0435", Unit: "EV", Description: "\u041A \u0443\u043A\u043B\u043E\u043D\u0435\u043D\u0438\u044E", CssClass: "def" },
+        "Evasion:percent": { Icon: "\u{1F4A8}", Title: "\u041B\u043E\u0432\u043A\u043E\u0441\u0442\u044C \u0432 \u0437\u0430\u0449\u0438\u0442\u0435", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0443\u043A\u043B\u043E\u043D\u0435\u043D\u0438\u044F", CssClass: "def" },
+        "ES:flat": { Icon: "\u{1F537}", Title: "\u042D\u043D\u0435\u0440\u0433\u043E\u0449\u0438\u0442", Unit: "ES", Description: "\u041A \u044D\u043D\u0435\u0440\u0433\u043E\u0449\u0438\u0442\u0443", CssClass: "def" },
+        "ES:percent": { Icon: "\u{1F537}", Title: "\u0423\u0441\u0438\u043B\u0435\u043D\u0438\u0435 \u0449\u0438\u0442\u0430", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u044D\u043D\u0435\u0440\u0433\u043E\u0449\u0438\u0442\u0430", CssClass: "def" },
+        "FireResist:percentPoint": { Icon: "\u{1F525}", Title: "\u0421\u043E\u043F\u0440. \u043E\u0433\u043D\u044E", Unit: "%", Description: "\u041A \u0441\u043E\u043F\u0440\u043E\u0442\u0438\u0432\u043B\u0435\u043D\u0438\u044E \u043E\u0433\u043D\u044E", CssClass: "res" },
+        "ColdResist:percentPoint": { Icon: "\u2744\uFE0F", Title: "\u0421\u043E\u043F\u0440. \u0445\u043E\u043B\u043E\u0434\u0443", Unit: "%", Description: "\u041A \u0441\u043E\u043F\u0440\u043E\u0442\u0438\u0432\u043B\u0435\u043D\u0438\u044E \u0445\u043E\u043B\u043E\u0434\u0443", CssClass: "res" },
+        "LightResist:percentPoint": { Icon: "\u26A1", Title: "\u0421\u043E\u043F\u0440. \u043C\u043E\u043B\u043D\u0438\u0438", Unit: "%", Description: "\u041A \u0441\u043E\u043F\u0440\u043E\u0442\u0438\u0432\u043B\u0435\u043D\u0438\u044E \u043C\u043E\u043B\u043D\u0438\u0438", CssClass: "res" },
+        "PhysDamage:percent": { Icon: "\u2694\uFE0F", Title: "\u0424\u0438\u0437\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u0443\u0440\u043E\u043D", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0444\u0438\u0437\u0438\u0447\u0435\u0441\u043A\u043E\u0433\u043E \u0443\u0440\u043E\u043D\u0430", CssClass: "dmg" },
+        "FireDamage:percent": { Icon: "\u{1F525}", Title: "\u0423\u0440\u043E\u043D \u043E\u0433\u043D\u0435\u043C", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0443\u0440\u043E\u043D\u0430 \u043E\u0433\u043D\u0451\u043C", CssClass: "fire" },
+        "ColdDamage:percent": { Icon: "\u2744\uFE0F", Title: "\u0423\u0440\u043E\u043D \u0445\u043E\u043B\u043E\u0434\u043E\u043C", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0443\u0440\u043E\u043D\u0430 \u0445\u043E\u043B\u043E\u0434\u043E\u043C", CssClass: "cold" },
+        "LightDamage:percent": { Icon: "\u26A1", Title: "\u0423\u0440\u043E\u043D \u043C\u043E\u043B\u043D\u0438\u0435\u0439", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0443\u0440\u043E\u043D\u0430 \u043C\u043E\u043B\u043D\u0438\u0435\u0439", CssClass: "light" },
+        "AttackSpeed:percent": { Icon: "\u26A1", Title: "\u0421\u043A\u043E\u0440\u043E\u0441\u0442\u044C \u0430\u0442\u0430\u043A\u0438", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0441\u043A\u043E\u0440\u043E\u0441\u0442\u0438 \u0430\u0442\u0430\u043A\u0438", CssClass: "spd" },
+        "AttackRange:percent": { Icon: "\u{1F3AF}", Title: "\u0420\u0430\u0434\u0438\u0443\u0441 \u0430\u0442\u0430\u043A\u0438", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0440\u0430\u0434\u0438\u0443\u0441\u0430 \u0430\u0442\u0430\u043A\u0438", CssClass: "spd" },
+        "MovementSpeed:percentPoint": { Icon: "\u{1F3C3}", Title: "\u0421\u043A\u043E\u0440\u043E\u0441\u0442\u044C \u0431\u0435\u0433\u0430", Unit: "%", Description: "\u041A \u0441\u043A\u043E\u0440\u043E\u0441\u0442\u0438 \u043F\u0435\u0440\u0435\u0434\u0432\u0438\u0436\u0435\u043D\u0438\u044F", CssClass: "spd" },
+        "Accuracy:flat": { Icon: "\u{1F3AF}", Title: "\u041C\u0435\u0442\u043A\u043E\u0441\u0442\u044C", Unit: "ACC", Description: "\u041A \u043C\u0435\u0442\u043A\u043E\u0441\u0442\u0438", CssClass: "spd" },
+        "CriticalChance:percentPoint": { Icon: "\u{1F4A5}", Title: "\u0428\u0430\u043D\u0441 \u043A\u0440\u0438\u0442\u0430", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0430\u0435\u0442 \u0448\u0430\u043D\u0441 \u043A\u0440\u0438\u0442\u0438\u0447\u0435\u0441\u043A\u043E\u0433\u043E \u0443\u0434\u0430\u0440\u0430", CssClass: "crit" },
+        "CriticalMultiplier:flat": { Icon: "\u{1F4A5}", Title: "\u041C\u043D\u043E\u0436\u0438\u0442\u0435\u043B\u044C \u043A\u0440\u0438\u0442\u0430", Unit: "x", Description: "\u0423\u0441\u0438\u043B\u0438\u0432\u0430\u0435\u0442 \u043A\u0440\u0438\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u0443\u0440\u043E\u043D", CssClass: "crit" },
+        // ─── Percent-версии статов (Str/Dex/Int) ───
+        "Str:percent": { Icon: "\u{1F4AA}", Title: "\u0421\u0438\u043B\u0430", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0441\u0438\u043B\u044B", CssClass: "str" },
+        "Dex:percent": { Icon: "\u{1F3F9}", Title: "\u041B\u043E\u0432\u043A\u043E\u0441\u0442\u044C", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u043B\u043E\u0432\u043A\u043E\u0441\u0442\u0438", CssClass: "dex" },
+        "Int:percent": { Icon: "\u{1F52E}", Title: "\u0418\u043D\u0442\u0435\u043B\u043B\u0435\u043A\u0442", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0438\u043D\u0442\u0435\u043B\u043B\u0435\u043A\u0442\u0430", CssClass: "int" },
+        // ─── Energy Shield (регенерация) ───
+        "ESRegenDelay:percent": { Icon: "\u23F3", Title: "\u0417\u0430\u0434\u0435\u0440\u0436\u043A\u0430 \u0449\u0438\u0442\u0430", Unit: "%", Description: "\u0421\u043E\u043A\u0440\u0430\u0449\u0430\u0435\u0442 \u0437\u0430\u0434\u0435\u0440\u0436\u043A\u0443 \u043F\u0435\u0440\u0435\u0434 \u0440\u0435\u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u0435\u0439 \u044D\u043D\u0435\u0440\u0433\u043E\u0449\u0438\u0442\u0430", CssClass: "def" },
+        "ESRegenRate:percent": { Icon: "\u{1F537}", Title: "\u0421\u043A\u043E\u0440\u043E\u0441\u0442\u044C \u0440\u0435\u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u0438 \u0449\u0438\u0442\u0430", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u0441\u043A\u043E\u0440\u043E\u0441\u0442\u0438 \u0440\u0435\u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u0438 \u044D\u043D\u0435\u0440\u0433\u043E\u0449\u0438\u0442\u0430", CssClass: "def" },
+        "ESRegenRate:flat": { Icon: "\u{1F537}", Title: "\u0420\u0435\u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u044F \u0449\u0438\u0442\u0430", Unit: "ES/s", Description: "\u0420\u0435\u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u044F \u044D\u043D\u0435\u0440\u0433\u043E\u0449\u0438\u0442\u0430 \u0432 \u0441\u0435\u043A\u0443\u043D\u0434\u0443", CssClass: "def" },
+        // ─── Stun ───
+        "Stun:flat": { Icon: "\u{1F4AB}", Title: "\u0428\u0430\u043D\u0441 \u043E\u0433\u043B\u0443\u0448\u0435\u043D\u0438\u044F", Unit: "%", Description: "\u041A \u0448\u0430\u043D\u0441\u0443 \u043E\u0433\u043B\u0443\u0448\u0438\u0442\u044C \u0432\u0440\u0430\u0433\u0430", CssClass: "crit" },
+        "StunReduction:flat": { Icon: "\u{1F4AB}", Title: "\u0421\u043E\u043F\u0440\u043E\u0442\u0438\u0432\u043B\u0435\u043D\u0438\u0435 \u043E\u0433\u043B\u0443\u0448\u0435\u043D\u0438\u044E", Unit: "%", Description: "\u0421\u043D\u0438\u0436\u0435\u043D\u0438\u0435 \u0434\u043B\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0441\u0442\u0438 \u043E\u0433\u043B\u0443\u0448\u0435\u043D\u0438\u044F", CssClass: "def" },
+        // ─── Reflect / Reduction / Block ───
+        "PhysReflect:percent": { Icon: "\u{1F994}", Title: "\u041E\u0442\u0440\u0430\u0436\u0435\u043D\u0438\u0435 \u0443\u0440\u043E\u043D\u0430", Unit: "%", Description: "\u041E\u0442\u0440\u0430\u0436\u0430\u0435\u0442 \u0447\u0430\u0441\u0442\u044C \u0444\u0438\u0437\u0438\u0447\u0435\u0441\u043A\u043E\u0433\u043E \u0443\u0440\u043E\u043D\u0430", CssClass: "dmg" },
+        "PhysReflect:flat": { Icon: "\u{1F994}", Title: "\u041E\u0442\u0440\u0430\u0436\u0435\u043D\u0438\u0435 \u0443\u0440\u043E\u043D\u0430", Unit: "DMG", Description: "\u041E\u0442\u0440\u0430\u0436\u0430\u0435\u0442 \u0444\u0438\u0437\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u0443\u0440\u043E\u043D", CssClass: "dmg" },
+        "PhysReduction:percent": { Icon: "\u{1F6E1}\uFE0F", Title: "\u0421\u043D\u0438\u0436\u0435\u043D\u0438\u0435 \u0444\u0438\u0437. \u0443\u0440\u043E\u043D\u0430", Unit: "%", Description: "\u0421\u043D\u0438\u0436\u0430\u0435\u0442 \u043F\u043E\u043B\u0443\u0447\u0430\u0435\u043C\u044B\u0439 \u0444\u0438\u0437\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u0443\u0440\u043E\u043D", CssClass: "def" },
+        "Block:percent": { Icon: "\u{1F9F1}", Title: "\u0411\u043B\u043E\u043A", Unit: "%", Description: "\u041F\u043E\u0432\u044B\u0448\u0435\u043D\u0438\u0435 \u044D\u0444\u0444\u0435\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u0438 \u0431\u043B\u043E\u043A\u0430", CssClass: "def" },
+        "Block:percentPoint": { Icon: "\u{1F9F1}", Title: "\u0428\u0430\u043D\u0441 \u0431\u043B\u043E\u043A\u0430", Unit: "%", Description: "\u041A \u0448\u0430\u043D\u0441\u0443 \u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0430\u0442\u0430\u043A\u0443", CssClass: "def" }
+      });
+      /**
+       * Капстоуны — сопоставление по Id из JSON.
+       * Если добавишь новый капстоун в JSON — добавь запись сюда.
+       */
+      __publicField(this, "bonusKeystoneResources", {
+        blood_and_sand: {
+          Icon: "\u{1FA78}",
+          Title: "\u041A\u0440\u043E\u0432\u044C \u0438 \u043F\u0435\u0441\u043E\u043A",
+          Unit: "",
+          Description: "\u041E\u0433\u0440\u043E\u043C\u043D\u044B\u0439 \u0444\u0438\u0437\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u0443\u0440\u043E\u043D \u0446\u0435\u043D\u043E\u0439 \u0436\u0438\u0432\u0443\u0447\u0435\u0441\u0442\u0438",
+          CssClass: "dmg"
+        },
+        glass_cannon: {
+          Icon: "\u{1F4A5}",
+          Title: "\u0421\u0442\u0435\u043A\u043B\u044F\u043D\u043D\u0430\u044F \u043F\u0443\u0448\u043A\u0430",
+          Unit: "",
+          Description: "\u0421\u0442\u0438\u0445\u0438\u0438 \u0431\u044C\u044E\u0442 \u0441\u0438\u043B\u044C\u043D\u0435\u0435, \u043D\u043E \u0431\u0440\u043E\u043D\u044F \u0442\u0430\u0435\u0442",
+          CssClass: "dmg"
+        },
+        berserker_rage: {
+          Icon: "\u{1F525}",
+          Title: "\u042F\u0440\u043E\u0441\u0442\u044C \u0431\u0435\u0440\u0441\u0435\u0440\u043A\u0430",
+          Unit: "",
+          Description: "\u0421\u043A\u043E\u0440\u043E\u0441\u0442\u044C \u0430\u0442\u0430\u043A\u0438 \u0432 \u043E\u0431\u043C\u0435\u043D \u043D\u0430 \u0441\u043E\u043F\u0440\u043E\u0442\u0438\u0432\u043B\u0435\u043D\u0438\u044F",
+          CssClass: "spd"
+        },
+        heavy_armour: {
+          Icon: "\u{1F6E1}\uFE0F",
+          Title: "\u0422\u044F\u0436\u0451\u043B\u044B\u0439 \u0434\u043E\u0441\u043F\u0435\u0445",
+          Unit: "",
+          Description: "\u041C\u0430\u043A\u0441\u0438\u043C\u0443\u043C \u0431\u0440\u043E\u043D\u0438, \u043C\u0438\u043D\u0438\u043C\u0443\u043C \u043C\u043E\u0431\u0438\u043B\u044C\u043D\u043E\u0441\u0442\u0438",
+          CssClass: "def"
+        },
+        light_step: {
+          Icon: "\u{1F4A8}",
+          Title: "\u041B\u0451\u0433\u043A\u0438\u0439 \u0448\u0430\u0433",
+          Unit: "",
+          Description: "\u0423\u043A\u043B\u043E\u043D\u0435\u043D\u0438\u0435 \u0432 \u043E\u0431\u043C\u0435\u043D \u043D\u0430 \u0431\u0440\u043E\u043D\u044E",
+          CssClass: "def"
+        },
+        crystal_heart: {
+          Icon: "\u{1F537}",
+          Title: "\u041A\u0440\u0438\u0441\u0442\u0430\u043B\u044C\u043D\u043E\u0435 \u0441\u0435\u0440\u0434\u0446\u0435",
+          Unit: "",
+          Description: "\u041E\u0433\u0440\u043E\u043C\u043D\u044B\u0439 \u044D\u043D\u0435\u0440\u0433\u043E\u0449\u0438\u0442 \u0446\u0435\u043D\u043E\u0439 \u0437\u0434\u043E\u0440\u043E\u0432\u044C\u044F",
+          CssClass: "def"
+        },
+        pyromancer: {
+          Icon: "\u{1F525}",
+          Title: "\u041F\u0438\u0440\u043E\u043C\u0430\u043D\u0442",
+          Unit: "",
+          Description: "\u041E\u0433\u043E\u043D\u044C \u0441\u0438\u043B\u044C\u043D\u0435\u0435, \u0445\u043E\u043B\u043E\u0434 \u0441\u043B\u0430\u0431\u0435\u0435",
+          CssClass: "fire"
+        },
+        cryomancer: {
+          Icon: "\u2744\uFE0F",
+          Title: "\u041A\u0440\u0438\u043E\u043C\u0430\u043D\u0442",
+          Unit: "",
+          Description: "\u0425\u043E\u043B\u043E\u0434 \u0441\u0438\u043B\u044C\u043D\u0435\u0435, \u043E\u0433\u043E\u043D\u044C \u0441\u043B\u0430\u0431\u0435\u0435",
+          CssClass: "cold"
+        },
+        electromancer: {
+          Icon: "\u26A1",
+          Title: "\u042D\u043B\u0435\u043A\u0442\u0440\u043E\u043C\u0430\u043D\u0442",
+          Unit: "",
+          Description: "\u041C\u043E\u043B\u043D\u0438\u044F \u0441\u0438\u043B\u044C\u043D\u0435\u0435, \u043E\u0433\u043E\u043D\u044C \u0441\u043B\u0430\u0431\u0435\u0435",
+          CssClass: "light"
+        },
+        double_strike: {
+          Icon: "\u2694\uFE0F",
+          Title: "\u0414\u0432\u043E\u0439\u043D\u043E\u0439 \u0443\u0434\u0430\u0440",
+          Unit: "",
+          Description: "\u0421\u043A\u043E\u0440\u043E\u0441\u0442\u044C \u0430\u0442\u0430\u043A\u0438 \u0432 \u043E\u0431\u043C\u0435\u043D \u043D\u0430 \u0441\u0438\u043B\u0443 \u0443\u0434\u0430\u0440\u0430",
+          CssClass: "spd"
+        },
+        glass_resist: {
+          Icon: "\u{1F4A0}",
+          Title: "\u0425\u0440\u0443\u043F\u043A\u043E\u0441\u0442\u044C \u0441\u0442\u0438\u0445\u0438\u0439",
+          Unit: "",
+          Description: "\u0421\u043E\u043F\u0440\u043E\u0442\u0438\u0432\u043B\u0435\u043D\u0438\u044F \u0432 \u043E\u0431\u043C\u0435\u043D \u043D\u0430 \u0437\u0434\u043E\u0440\u043E\u0432\u044C\u0435",
+          CssClass: "res"
+        },
+        crit_lord: {
+          Icon: "\u{1F4A5}",
+          Title: "\u0412\u043B\u0430\u0434\u044B\u043A\u0430 \u043A\u0440\u0438\u0442\u043E\u0432",
+          Unit: "",
+          Description: "\u041A\u0440\u0438\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u0443\u0440\u043E\u043D \u0432 \u043E\u0431\u043C\u0435\u043D \u043D\u0430 \u0441\u043A\u043E\u0440\u043E\u0441\u0442\u044C",
+          CssClass: "crit"
+        },
+        precision_strike: {
+          Icon: "\u{1F3AF}",
+          Title: "\u0422\u043E\u0447\u043D\u044B\u0439 \u0443\u0434\u0430\u0440",
+          Unit: "",
+          Description: "\u0422\u043E\u0447\u043D\u043E\u0441\u0442\u044C \u0438 \u043A\u0440\u0438\u0442 \u0432 \u043E\u0431\u043C\u0435\u043D \u043D\u0430 \u0443\u0440\u043E\u043D",
+          CssClass: "crit"
+        },
+        thorned_hide: {
+          Icon: "\u{1F335}",
+          Title: "\u0422\u0435\u0440\u043D\u043E\u0432\u0430\u044F \u043A\u043E\u0436\u0430",
+          Unit: "",
+          Description: "\u041E\u0442\u0440\u0430\u0436\u0430\u0435\u0442 \u0443\u0440\u043E\u043D \u0446\u0435\u043D\u043E\u0439 \u0437\u0434\u043E\u0440\u043E\u0432\u044C\u044F",
+          CssClass: "dmg"
+        },
+        stun_lord: {
+          Icon: "\u{1F4AB}",
+          Title: "\u0412\u043B\u0430\u0434\u044B\u043A\u0430 \u043E\u0433\u043B\u0443\u0448\u0435\u043D\u0438\u044F",
+          Unit: "",
+          Description: "\u041E\u0433\u043B\u0443\u0448\u0435\u043D\u0438\u0435 \u0432 \u043E\u0431\u043C\u0435\u043D \u043D\u0430 \u0441\u043A\u043E\u0440\u043E\u0441\u0442\u044C \u0430\u0442\u0430\u043A\u0438",
+          CssClass: "crit"
+        },
+        block_master: {
+          Icon: "\u{1F9F1}",
+          Title: "\u041C\u0430\u0441\u0442\u0435\u0440 \u0431\u043B\u043E\u043A\u0430",
+          Unit: "",
+          Description: "\u0411\u043B\u043E\u043A \u0432 \u043E\u0431\u043C\u0435\u043D \u043D\u0430 \u0443\u043A\u043B\u043E\u043D\u0435\u043D\u0438\u0435",
+          CssClass: "def"
+        },
+        es_overflow: {
+          Icon: "\u{1F537}",
+          Title: "\u041F\u0435\u0440\u0435\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u0435 \u0449\u0438\u0442\u0430",
+          Unit: "",
+          Description: "\u0420\u0435\u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u044F \u0449\u0438\u0442\u0430 \u0432 \u043E\u0431\u043C\u0435\u043D \u043D\u0430 \u0435\u0433\u043E \u0437\u0430\u043F\u0430\u0441",
+          CssClass: "def"
+        }
+      });
       ticker.OnTick((d) => this.Refresh());
     }
     Refresh() {
@@ -1225912,12 +1226211,12 @@ ${e?.stack || ""}</pre>
       if (chooseList.length === 0) {
         this.dialog.Close();
         World.RemoveComponent(userEntity, BonusChooseComponent);
-        this.gameStateService.Resume(gameState, _UI.PAUSE_SOURCE);
+        this.gameStateService.Resume(gameState, _UI2.PAUSE_SOURCE);
         return;
       }
       if (this.dialog.Visibled) return;
       this.dialog.Open();
-      this.gameStateService.Pause(gameState, _UI.PAUSE_SOURCE);
+      this.gameStateService.Pause(gameState, _UI2.PAUSE_SOURCE);
       this.ShowBonuses(userEntity, chooseList);
     }
     ShowBonuses(userEntity, chooseList) {
@@ -1225962,7 +1226261,7 @@ ${e?.stack || ""}</pre>
       return card;
     }
     GetEffectUnit(e) {
-      return BonusStatResources[`${e.Type}:${e.Mod}`]?.Unit ?? "";
+      return this.bonusStatResources[`${e.Type}:${e.Mod}`]?.Unit ?? "";
     }
     FormatEffect(e) {
       if (e.Mod === "percent" /* PERCENT */ || e.Mod === "percentPoint" /* PERCENT_POINT */)
@@ -1225973,7 +1226272,7 @@ ${e?.stack || ""}</pre>
       return `${sign}${valueStr} <small>${unit}</small>`;
     }
     GetBonusView(bonus) {
-      if (bonus.IsKeystone) return BonusKeystoneResources[bonus.Id] ?? {
+      if (bonus.IsKeystone) return this.bonusKeystoneResources[bonus.Id] ?? {
         Icon: "\u2753",
         Title: bonus.Id,
         Unit: "",
@@ -1225981,7 +1226280,7 @@ ${e?.stack || ""}</pre>
         CssClass: ""
       };
       const key = `${bonus.Primary.Type}:${bonus.Primary.Mod}`;
-      return BonusStatResources[`${bonus.Primary.Type}:${bonus.Primary.Mod}`] ?? {
+      return this.bonusStatResources[`${bonus.Primary.Type}:${bonus.Primary.Mod}`] ?? {
         Icon: "\u2753",
         Title: key,
         Unit: "",
@@ -1225990,8 +1226289,8 @@ ${e?.stack || ""}</pre>
       };
     }
   };
-  __publicField(_UI, "PAUSE_SOURCE", "dialog:bonus");
-  var UI3 = _UI;
+  __publicField(_UI2, "PAUSE_SOURCE", "dialog:bonus");
+  var UI3 = _UI2;
   function InitBonusModule(ticker) {
     World.SystemAdd(new BonusSystem());
     new UI3(ticker);
@@ -1226047,10 +1226346,8 @@ ${e?.stack || ""}</pre>
       __publicField(this, "Attributes", 0);
       __publicField(this, "AttributesInc", 0);
       //Оглушение
-      __publicField(this, "StunInc", 0);
-      __publicField(this, "StunIncPerc", 0);
+      __publicField(this, "Stun", 0);
       __publicField(this, "StunReduction", 0);
-      __publicField(this, "StunReductionPerc", 0);
       // Жизнь
       __publicField(this, "LifeMaxFlat", 0);
       __publicField(this, "LifeMaxInc", 0);
@@ -1226126,9 +1226423,9 @@ ${e?.stack || ""}</pre>
         Str: 0,
         Dex: 0,
         Int: 0,
-        StunInc: 0,
+        Stun: 0,
         StunReduction: 0,
-        StunDurationInc: 0,
+        StunDuration: 0,
         StunDurationReduction: 0,
         LifeMax: 0,
         LifePerSecond: 0,
@@ -1226207,10 +1226504,10 @@ ${e?.stack || ""}</pre>
       s.CriticalChance = (base.CriticalChance + raw.CritChanceFlat + raw.CritChanceAddFlat) * (1 + raw.CritChanceInc / 100);
       ;
       s.CriticalMultiplier = base.CriticalMultiplier + raw.CritMultiplierFlat;
-      s.StunInc = base.StunInc + raw.StunInc;
+      s.Stun = base.Stun + raw.Stun;
       s.StunReduction = base.StunReduction + raw.StunReduction;
-      s.StunDurationInc = base.StunDurationInc + raw.StunIncPerc;
-      s.StunDurationReduction = base.StunDurationReduction + raw.StunReductionPerc;
+      s.StunDuration = base.StunDuration;
+      s.StunDurationReduction = base.StunDurationReduction;
       return s;
     }
     static AffixToRaw(type, value) {
@@ -1226225,7 +1226522,7 @@ ${e?.stack || ""}</pre>
         ["additional_all_attributes" /* ATTRIBUTES */]: (v) => ({ Attributes: v }),
         ["all_attributes_+%" /* ATTRIBUTES_INC */]: (v) => ({ AttributesInc: v }),
         // ─── Оглушение ───
-        ["stun_threshold_+%" /* STUN_INC */]: (v) => ({ StunInc: v }),
+        ["stun_threshold_+%" /* STUN_INC */]: (v) => ({ Stun: v }),
         ["base_stun_threshold_reduction_+%" /* STUN_REDUCTION */]: (v) => ({ StunReduction: v }),
         // ─── Жизнь ───
         ["base_maximum_life" /* LIFE_MAX */]: (v) => ({ LifeMaxFlat: v }),
@@ -1226309,7 +1226606,7 @@ ${e?.stack || ""}</pre>
         Dex: (e) => ({ Dex: e.Value }),
         Int: (e) => ({ Int: e.Value }),
         // Оглушение: percentPoint → аддитивные %, percent → множитель
-        StunInc: (e) => e.Mod === "percentPoint" /* PERCENT_POINT */ ? { StunInc: e.Value } : { StunIncPerc: e.Value },
+        StunInc: (e) => e.Mod === "percentPoint" /* PERCENT_POINT */ ? { Stun: e.Value } : { StunIncPerc: e.Value },
         StunReduction: (e) => e.Mod === "percentPoint" /* PERCENT_POINT */ ? { StunReduction: e.Value } : { StunReductionPerc: e.Value },
         // Жизнь
         LifeMax: (e) => e.Mod === "flat" /* FLAT */ ? { LifeMaxFlat: e.Value } : { LifeMaxInc: e.Value },
@@ -1226508,7 +1226805,7 @@ ${e?.stack || ""}</pre>
       this.accuracy.textContent = stats.Accuracy.toFixed();
       this.critChance.textContent = stats.CriticalChance.toFixed() + "%";
       this.critMult.textContent = stats.CriticalMultiplier.toString() + "x";
-      this.stunInc.textContent = stats.StunInc.toFixed() + "%";
+      this.stunInc.textContent = stats.Stun.toFixed() + "%";
       this.updateWeaponName(statsEntity);
       this.menuDialog.Open();
       this.wasOpen = true;
@@ -1226826,7 +1227123,7 @@ ${e?.stack || ""}</pre>
       }
     }
   };
-  var _UI2 = class _UI2 {
+  var _UI3 = class _UI3 {
     constructor(ticker, gameStateService = new GameStateService(), dialog = new UIDialog("loot")) {
       this.ticker = ticker;
       this.gameStateService = gameStateService;
@@ -1226841,7 +1227138,7 @@ ${e?.stack || ""}</pre>
       if (!lootEntity) return;
       if (this.wasOpen && !this.dialog.Visibled) {
         this.wasOpen = false;
-        this.gameStateService.Resume(gameState, _UI2.PAUSE_SOURCE);
+        this.gameStateService.Resume(gameState, _UI3.PAUSE_SOURCE);
         World.RemoveComponent(lootEntity, LootComponent);
         return;
       }
@@ -1226853,7 +1227150,7 @@ ${e?.stack || ""}</pre>
       if (this.dialog.Visibled) return;
       this.dialog.Open();
       this.wasOpen = true;
-      this.gameStateService.Pause(gameState, _UI2.PAUSE_SOURCE);
+      this.gameStateService.Pause(gameState, _UI3.PAUSE_SOURCE);
       this.ShowLoot(lootEntity, loot);
     }
     ShowLoot(lootEntity, loot) {
@@ -1227045,8 +1227342,8 @@ ${e?.stack || ""}</pre>
       return "";
     }
   };
-  __publicField(_UI2, "PAUSE_SOURCE", "dialog:loot");
-  var UI6 = _UI2;
+  __publicField(_UI3, "PAUSE_SOURCE", "dialog:loot");
+  var UI6 = _UI3;
   function InitLootModule(ticker) {
     World.SystemAdd(new LootSystem());
     new UI6(ticker);

@@ -65,15 +65,12 @@ class StunSystem implements System
             const sourceStats = World.GetComponent(hit.Source, EntityStatsComponent)?.Final;
             const effectiveLife = Math.max(1, targetStats.LifeMax + targetStats.ES);
             const baseChance = damage / effectiveLife * StunSystem.ChancePerLifePercent;
-            const chance = Math.max(0, Math.min(100, baseChance + (sourceStats?.StunInc ?? 0) - targetStats.StunReduction));
+            const chance = Math.max(0, Math.min(100, baseChance + (sourceStats?.Stun ?? 0) - targetStats.StunReduction));
 
             if (Math.random() * 100 >= chance) continue;
 
             const reduction = Math.max(0, Math.min(StunSystem.MaxDurationReduction, targetStats.StunDurationReduction)) / 100;
-            const duration = Math.max(0.1,
-                StunSystem.BaseDuration
-                * (1 + (sourceStats?.StunDurationInc ?? 0) / 100)
-                * (1 - reduction));
+            const duration = Math.max(0.1, StunSystem.BaseDuration * (1 + (sourceStats?.StunDuration ?? 0) / 100) * (1 - reduction));
 
             const existing = World.GetComponent(hit.Target, StunComponent);
             if (existing)

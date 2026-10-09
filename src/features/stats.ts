@@ -68,9 +68,9 @@ export interface IEntityStats
     Int: number;
 
     // Оглушение
-    StunInc: number;
+    Stun: number;
     StunReduction: number;
-    StunDurationInc: number;
+    StunDuration: number;
     StunDurationReduction: number;
 
     // Жизнь и регенерация
@@ -119,10 +119,8 @@ export class RawStats
     Attributes = 0;
     AttributesInc = 0;
     //Оглушение
-    StunInc = 0;
-    StunIncPerc = 0;
+    Stun = 0;
     StunReduction = 0;
-    StunReductionPerc = 0;
 
     // Жизнь
     LifeMaxFlat = 0;
@@ -199,8 +197,8 @@ export class EntityStatsService
     {
         return {
             Str: 0, Dex: 0, Int: 0,
-            StunInc: 0, StunReduction: 0,
-            StunDurationInc: 0, StunDurationReduction: 0,
+            Stun: 0, StunReduction: 0,
+            StunDuration: 0, StunDurationReduction: 0,
             LifeMax: 0, LifePerSecond: 0, LifePerKill: 0,
             Armour: 0, Evasion: 0,
             ES: 0, ESRegenDelay: 5, ESRegenRate: 10,
@@ -288,10 +286,10 @@ export class EntityStatsService
         s.CriticalMultiplier = base.CriticalMultiplier + raw.CritMultiplierFlat;
 
         // ─── Оглушение ───
-        s.StunInc = base.StunInc + raw.StunInc;
+        s.Stun = base.Stun + raw.Stun;
         s.StunReduction = base.StunReduction + raw.StunReduction;
-        s.StunDurationInc = base.StunDurationInc + raw.StunIncPerc;
-        s.StunDurationReduction = base.StunDurationReduction + raw.StunReductionPerc;
+        s.StunDuration = base.StunDuration;
+        s.StunDurationReduction = base.StunDurationReduction;
 
         return s;
     }
@@ -313,7 +311,7 @@ export class EntityStatsService
             [EAffixType.ATTRIBUTES_INC]: (v) => ({ AttributesInc: v }),
 
             // ─── Оглушение ───
-            [EAffixType.STUN_INC]: (v) => ({ StunInc: v }),
+            [EAffixType.STUN_INC]: (v) => ({ Stun: v }),
             [EAffixType.STUN_REDUCTION]: (v) => ({ StunReduction: v }),
 
             // ─── Жизнь ───
@@ -417,7 +415,7 @@ export class EntityStatsService
             Int: (e) => ({ Int: e.Value }),
 
             // Оглушение: percentPoint → аддитивные %, percent → множитель
-            StunInc: (e) => e.Mod === EBonusMod.PERCENT_POINT ? { StunInc: e.Value } : { StunIncPerc: e.Value },
+            StunInc: (e) => e.Mod === EBonusMod.PERCENT_POINT ? { Stun: e.Value } : { StunIncPerc: e.Value },
             StunReduction: (e) => e.Mod === EBonusMod.PERCENT_POINT ? { StunReduction: e.Value } : { StunReductionPerc: e.Value },
 
             // Жизнь
@@ -704,7 +702,7 @@ class UI
         this.accuracy.textContent = stats.Accuracy.toFixed();
         this.critChance.textContent = stats.CriticalChance.toFixed() + '%';
         this.critMult.textContent = stats.CriticalMultiplier.toString() + 'x';
-        this.stunInc.textContent = stats.StunInc.toFixed() + '%';
+        this.stunInc.textContent = stats.Stun.toFixed() + '%';
 
         // ─────────── ОРУЖИЕ (если есть компонент) ───────────
         this.updateWeaponName(statsEntity);

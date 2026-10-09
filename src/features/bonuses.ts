@@ -80,31 +80,27 @@ export interface IBonus
 
 // ─── JSON-схема (только цифры) ───
 
-interface IJsonEffect
+interface IBonusNodePool
 {
     type: EBonusType;
     mod: EBonusMod;
     min: number;
     max: number;
-}
-
-interface IJsonPoolEntry extends IJsonEffect
-{
     weight?: number;
 }
 
-interface IJsonKeystone
+interface IBonusNodeKeystone
 {
     id: string;
     weight?: number;
-    primary: IJsonEffect;
-    secondary: IJsonEffect;
+    primary: IBonusNodePool;
+    secondary: IBonusNodePool;
 }
 
-interface IBonusJson
+interface IBonusNode
 {
-    pool: IJsonPoolEntry[];
-    keystones: IJsonKeystone[];
+    pool: IBonusNodePool[];
+    keystones: IBonusNodeKeystone[];
 }
 
 // ─── Компоненты ───
@@ -143,7 +139,7 @@ export class BonusSystem implements System
 
     private RollBonuses(count: number): IBonus[]
     {
-        const data = bonusData as IBonusJson;
+        const data = bonusData as IBonusNode;
         const pool = [...data.pool];
         const keystones = [...data.keystones];
         const result: IBonus[] = [];
@@ -187,16 +183,12 @@ export class BonusSystem implements System
         return picked;
     }
 
-    private BuildSimple(e: IJsonPoolEntry): IBonus
+    private BuildSimple(e: IBonusNodePool): IBonus
     {
-        return {
-            Id: `${e.type}:${e.mod}`,
-            Primary: { Type: e.type, Mod: e.mod, Value: this.RollValue(e.min, e.max) },
-            IsKeystone: false,
-        };
+        return { Id: `${e.type}:${e.mod}`, Primary: { Type: e.type, Mod: e.mod, Value: this.RollValue(e.min, e.max) }, IsKeystone: false, };
     }
 
-    private BuildKeystone(k: IJsonKeystone): IBonus
+    private BuildKeystone(k: IBonusNodeKeystone): IBonus
     {
         return {
             Id: k.id,
@@ -231,176 +223,175 @@ interface IBonusView
     CssClass: string;
 }
 
-const BonusStatResources: Record<string, IBonusView> = {
-    "Str:flat": { Icon: "💪", Title: "Сила", Unit: "STR", Description: "Добавляет силу", CssClass: "str" },
-    "Dex:flat": { Icon: "🏹", Title: "Ловкость", Unit: "DEX", Description: "Добавляет ловкость", CssClass: "dex" },
-    "Int:flat": { Icon: "🔮", Title: "Интеллект", Unit: "INT", Description: "Добавляет интеллект", CssClass: "int" },
-
-    "LifeMax:flat": { Icon: "❤️", Title: "Здоровье", Unit: "HP", Description: "К максимуму здоровья", CssClass: "hp" },
-    "LifeMax:percent": { Icon: "❤️", Title: "Прирост здоровья", Unit: "%", Description: "Повышение максимума здоровья", CssClass: "hp" },
-    "LifePerSecond:flat": { Icon: "💚", Title: "Регенерация", Unit: "HP/s", Description: "Регенерация здоровья в секунду", CssClass: "hp" },
-    "LifePerKill:flat": { Icon: "🩸", Title: "Здоровье за убийство", Unit: "HP", Description: "К здоровью за убийство", CssClass: "hp" },
-
-    "Armour:flat": { Icon: "🛡️", Title: "Броня", Unit: "AR", Description: "К броне", CssClass: "def" },
-    "Armour:percent": { Icon: "🛡️", Title: "Укрепление брони", Unit: "%", Description: "Повышение брони", CssClass: "def" },
-    "Evasion:flat": { Icon: "💨", Title: "Уклонение", Unit: "EV", Description: "К уклонению", CssClass: "def" },
-    "Evasion:percent": { Icon: "💨", Title: "Ловкость в защите", Unit: "%", Description: "Повышение уклонения", CssClass: "def" },
-    "ES:flat": { Icon: "🔷", Title: "Энергощит", Unit: "ES", Description: "К энергощиту", CssClass: "def" },
-    "ES:percent": { Icon: "🔷", Title: "Усиление щита", Unit: "%", Description: "Повышение энергощита", CssClass: "def" },
-
-    "FireResist:percentPoint": { Icon: "🔥", Title: "Сопр. огню", Unit: "%", Description: "К сопротивлению огню", CssClass: "res" },
-    "ColdResist:percentPoint": { Icon: "❄️", Title: "Сопр. холоду", Unit: "%", Description: "К сопротивлению холоду", CssClass: "res" },
-    "LightResist:percentPoint": { Icon: "⚡", Title: "Сопр. молнии", Unit: "%", Description: "К сопротивлению молнии", CssClass: "res" },
-
-    "PhysDamage:percent": { Icon: "⚔️", Title: "Физический урон", Unit: "%", Description: "Повышение физического урона", CssClass: "dmg" },
-    "FireDamage:percent": { Icon: "🔥", Title: "Урон огнем", Unit: "%", Description: "Повышение урона огнём", CssClass: "fire" },
-    "ColdDamage:percent": { Icon: "❄️", Title: "Урон холодом", Unit: "%", Description: "Повышение урона холодом", CssClass: "cold" },
-    "LightDamage:percent": { Icon: "⚡", Title: "Урон молнией", Unit: "%", Description: "Повышение урона молнией", CssClass: "light" },
-
-    "AttackSpeed:percent": { Icon: "⚡", Title: "Скорость атаки", Unit: "%", Description: "Повышение скорости атаки", CssClass: "spd" },
-    "AttackRange:percent": { Icon: "🎯", Title: "Радиус атаки", Unit: "%", Description: "Повышение радиуса атаки", CssClass: "spd" },
-    "MovementSpeed:percentPoint": { Icon: "🏃", Title: "Скорость бега", Unit: "%", Description: "К скорости передвижения", CssClass: "spd" },
-    "Accuracy:flat": { Icon: "🎯", Title: "Меткость", Unit: "ACC", Description: "К меткости", CssClass: "spd" },
-    "CriticalChance:percentPoint": { Icon: "💥", Title: "Шанс крита", Unit: "%", Description: "Повышает шанс критического удара", CssClass: "crit" },
-    "CriticalMultiplier:flat": { Icon: "💥", Title: "Множитель крита", Unit: "x", Description: "Усиливает критический урон", CssClass: "crit" },
-
-    // ─── Percent-версии статов (Str/Dex/Int) ───
-    "Str:percent": { Icon: "💪", Title: "Сила", Unit: "%", Description: "Повышение силы", CssClass: "str" },
-    "Dex:percent": { Icon: "🏹", Title: "Ловкость", Unit: "%", Description: "Повышение ловкости", CssClass: "dex" },
-    "Int:percent": { Icon: "🔮", Title: "Интеллект", Unit: "%", Description: "Повышение интеллекта", CssClass: "int" },
-
-    // ─── Energy Shield (регенерация) ───
-    "ESRegenDelay:percent": { Icon: "⏳", Title: "Задержка щита", Unit: "%", Description: "Сокращает задержку перед регенерацией энергощита", CssClass: "def" },
-    "ESRegenRate:percent": { Icon: "🔷", Title: "Скорость регенерации щита", Unit: "%", Description: "Повышение скорости регенерации энергощита", CssClass: "def" },
-    "ESRegenRate:flat": { Icon: "🔷", Title: "Регенерация щита", Unit: "ES/s", Description: "Регенерация энергощита в секунду", CssClass: "def" },
-
-    // ─── Stun ───
-    "StunInc:percent": { Icon: "💫", Title: "Увеличение оглушения", Unit: "%", Description: "Повышение длительности оглушения", CssClass: "crit" },
-    "StunInc:percentPoint": { Icon: "💫", Title: "Шанс оглушения", Unit: "%", Description: "К шансу оглушить врага", CssClass: "crit" },
-    "StunReduction:percent": { Icon: "💫", Title: "Сопротивление оглушению", Unit: "%", Description: "Снижение длительности оглушения", CssClass: "def" },
-    "StunReduction:percentPoint": { Icon: "💫", Title: "Защита от оглушения", Unit: "%", Description: "К сопротивлению оглушению", CssClass: "def" },
-
-    // ─── Reflect / Reduction / Block ───
-    "PhysReflect:percent": { Icon: "🦔", Title: "Отражение урона", Unit: "%", Description: "Отражает часть физического урона", CssClass: "dmg" },
-    "PhysReflect:flat": { Icon: "🦔", Title: "Отражение урона", Unit: "DMG", Description: "Отражает физический урон", CssClass: "dmg" },
-    "PhysReduction:percent": { Icon: "🛡️", Title: "Снижение физ. урона", Unit: "%", Description: "Снижает получаемый физический урон", CssClass: "def" },
-
-    "Block:percent": { Icon: "🧱", Title: "Блок", Unit: "%", Description: "Повышение эффективности блока", CssClass: "def" },
-    "Block:percentPoint": { Icon: "🧱", Title: "Шанс блока", Unit: "%", Description: "К шансу блокировать атаку", CssClass: "def" },
-};
-
-/**
- * Капстоуны — сопоставление по Id из JSON.
- * Если добавишь новый капстоун в JSON — добавь запись сюда.
- */
-export const BonusKeystoneResources: Record<string, IBonusView> = {
-    blood_and_sand: {
-        Icon: "🩸", Title: "Кровь и песок",
-        Unit: "", Description: "Огромный физический урон ценой живучести",
-        CssClass: "dmg",
-    },
-
-    glass_cannon: {
-        Icon: "💥", Title: "Стеклянная пушка",
-        Unit: "", Description: "Стихии бьют сильнее, но броня тает",
-        CssClass: "dmg",
-    },
-
-    berserker_rage: {
-        Icon: "🔥", Title: "Ярость берсерка",
-        Unit: "", Description: "Скорость атаки в обмен на сопротивления",
-        CssClass: "spd",
-    },
-
-    heavy_armour: {
-        Icon: "🛡️", Title: "Тяжёлый доспех",
-        Unit: "", Description: "Максимум брони, минимум мобильности",
-
-        CssClass: "def",
-    },
-    light_step: {
-        Icon: "💨", Title: "Лёгкий шаг",
-        Unit: "", Description: "Уклонение в обмен на броню",
-        CssClass: "def",
-    },
-
-    crystal_heart: {
-        Icon: "🔷", Title: "Кристальное сердце",
-        Unit: "", Description: "Огромный энергощит ценой здоровья",
-        CssClass: "def",
-    },
-
-    pyromancer: {
-        Icon: "🔥", Title: "Пиромант",
-        Unit: "", Description: "Огонь сильнее, холод слабее",
-        CssClass: "fire",
-    },
-
-    cryomancer: {
-        Icon: "❄️", Title: "Криомант",
-        Unit: "", Description: "Холод сильнее, огонь слабее",
-        CssClass: "cold",
-    },
-
-    electromancer: {
-        Icon: "⚡", Title: "Электромант",
-        Unit: "", Description: "Молния сильнее, огонь слабее",
-        CssClass: "light",
-    },
-
-    double_strike: {
-        Icon: "⚔️", Title: "Двойной удар",
-        Unit: "", Description: "Скорость атаки в обмен на силу удара",
-        CssClass: "spd",
-    },
-
-    glass_resist: {
-        Icon: "💠", Title: "Хрупкость стихий",
-        Unit: "", Description: "Сопротивления в обмен на здоровье",
-        CssClass: "res",
-    },
-
-    crit_lord: {
-        Icon: "💥", Title: "Владыка критов",
-        Unit: "", Description: "Критический урон в обмен на скорость",
-        CssClass: "crit",
-    },
-
-    precision_strike: {
-        Icon: "🎯", Title: "Точный удар",
-        Unit: "", Description: "Точность и крит в обмен на урон",
-        CssClass: "crit",
-    },
-
-    thorned_hide: {
-        Icon: "🌵", Title: "Терновая кожа",
-        Unit: "", Description: "Отражает урон ценой здоровья",
-        CssClass: "dmg",
-    },
-
-    stun_lord: {
-        Icon: "💫", Title: "Владыка оглушения",
-        Unit: "", Description: "Оглушение в обмен на скорость атаки",
-        CssClass: "crit",
-    },
-
-    block_master: {
-        Icon: "🧱", Title: "Мастер блока",
-        Unit: "", Description: "Блок в обмен на уклонение",
-        CssClass: "def",
-    },
-
-    es_overflow: {
-        Icon: "🔷", Title: "Переполнение щита",
-        Unit: "", Description: "Регенерация щита в обмен на его запас",
-        CssClass: "def",
-    },
-};
-
 
 class UI
 {
     private static readonly PAUSE_SOURCE = "dialog:bonus";
+
+    private bonusStatResources: Record<string, IBonusView> = {
+        "Str:flat": { Icon: "💪", Title: "Сила", Unit: "STR", Description: "Добавляет силу", CssClass: "str" },
+        "Dex:flat": { Icon: "🏹", Title: "Ловкость", Unit: "DEX", Description: "Добавляет ловкость", CssClass: "dex" },
+        "Int:flat": { Icon: "🔮", Title: "Интеллект", Unit: "INT", Description: "Добавляет интеллект", CssClass: "int" },
+
+        "LifeMax:flat": { Icon: "❤️", Title: "Здоровье", Unit: "HP", Description: "К максимуму здоровья", CssClass: "hp" },
+        "LifeMax:percent": { Icon: "❤️", Title: "Прирост здоровья", Unit: "%", Description: "Повышение максимума здоровья", CssClass: "hp" },
+        "LifePerSecond:flat": { Icon: "💚", Title: "Регенерация", Unit: "HP/s", Description: "Регенерация здоровья в секунду", CssClass: "hp" },
+        "LifePerKill:flat": { Icon: "🩸", Title: "Здоровье за убийство", Unit: "HP", Description: "К здоровью за убийство", CssClass: "hp" },
+
+        "Armour:flat": { Icon: "🛡️", Title: "Броня", Unit: "AR", Description: "К броне", CssClass: "def" },
+        "Armour:percent": { Icon: "🛡️", Title: "Укрепление брони", Unit: "%", Description: "Повышение брони", CssClass: "def" },
+        "Evasion:flat": { Icon: "💨", Title: "Уклонение", Unit: "EV", Description: "К уклонению", CssClass: "def" },
+        "Evasion:percent": { Icon: "💨", Title: "Ловкость в защите", Unit: "%", Description: "Повышение уклонения", CssClass: "def" },
+        "ES:flat": { Icon: "🔷", Title: "Энергощит", Unit: "ES", Description: "К энергощиту", CssClass: "def" },
+        "ES:percent": { Icon: "🔷", Title: "Усиление щита", Unit: "%", Description: "Повышение энергощита", CssClass: "def" },
+
+        "FireResist:percentPoint": { Icon: "🔥", Title: "Сопр. огню", Unit: "%", Description: "К сопротивлению огню", CssClass: "res" },
+        "ColdResist:percentPoint": { Icon: "❄️", Title: "Сопр. холоду", Unit: "%", Description: "К сопротивлению холоду", CssClass: "res" },
+        "LightResist:percentPoint": { Icon: "⚡", Title: "Сопр. молнии", Unit: "%", Description: "К сопротивлению молнии", CssClass: "res" },
+
+        "PhysDamage:percent": { Icon: "⚔️", Title: "Физический урон", Unit: "%", Description: "Повышение физического урона", CssClass: "dmg" },
+        "FireDamage:percent": { Icon: "🔥", Title: "Урон огнем", Unit: "%", Description: "Повышение урона огнём", CssClass: "fire" },
+        "ColdDamage:percent": { Icon: "❄️", Title: "Урон холодом", Unit: "%", Description: "Повышение урона холодом", CssClass: "cold" },
+        "LightDamage:percent": { Icon: "⚡", Title: "Урон молнией", Unit: "%", Description: "Повышение урона молнией", CssClass: "light" },
+
+        "AttackSpeed:percent": { Icon: "⚡", Title: "Скорость атаки", Unit: "%", Description: "Повышение скорости атаки", CssClass: "spd" },
+        "AttackRange:percent": { Icon: "🎯", Title: "Радиус атаки", Unit: "%", Description: "Повышение радиуса атаки", CssClass: "spd" },
+        "MovementSpeed:percentPoint": { Icon: "🏃", Title: "Скорость бега", Unit: "%", Description: "К скорости передвижения", CssClass: "spd" },
+        "Accuracy:flat": { Icon: "🎯", Title: "Меткость", Unit: "ACC", Description: "К меткости", CssClass: "spd" },
+        "CriticalChance:percentPoint": { Icon: "💥", Title: "Шанс крита", Unit: "%", Description: "Повышает шанс критического удара", CssClass: "crit" },
+        "CriticalMultiplier:flat": { Icon: "💥", Title: "Множитель крита", Unit: "x", Description: "Усиливает критический урон", CssClass: "crit" },
+
+        // ─── Percent-версии статов (Str/Dex/Int) ───
+        "Str:percent": { Icon: "💪", Title: "Сила", Unit: "%", Description: "Повышение силы", CssClass: "str" },
+        "Dex:percent": { Icon: "🏹", Title: "Ловкость", Unit: "%", Description: "Повышение ловкости", CssClass: "dex" },
+        "Int:percent": { Icon: "🔮", Title: "Интеллект", Unit: "%", Description: "Повышение интеллекта", CssClass: "int" },
+
+        // ─── Energy Shield (регенерация) ───
+        "ESRegenDelay:percent": { Icon: "⏳", Title: "Задержка щита", Unit: "%", Description: "Сокращает задержку перед регенерацией энергощита", CssClass: "def" },
+        "ESRegenRate:percent": { Icon: "🔷", Title: "Скорость регенерации щита", Unit: "%", Description: "Повышение скорости регенерации энергощита", CssClass: "def" },
+        "ESRegenRate:flat": { Icon: "🔷", Title: "Регенерация щита", Unit: "ES/s", Description: "Регенерация энергощита в секунду", CssClass: "def" },
+
+        // ─── Stun ───
+        "Stun:flat": { Icon: "💫", Title: "Шанс оглушения", Unit: "%", Description: "К шансу оглушить врага", CssClass: "crit" },
+        "StunReduction:flat": { Icon: "💫", Title: "Сопротивление оглушению", Unit: "%", Description: "Снижение длительности оглушения", CssClass: "def" },
+
+        // ─── Reflect / Reduction / Block ───
+        "PhysReflect:percent": { Icon: "🦔", Title: "Отражение урона", Unit: "%", Description: "Отражает часть физического урона", CssClass: "dmg" },
+        "PhysReflect:flat": { Icon: "🦔", Title: "Отражение урона", Unit: "DMG", Description: "Отражает физический урон", CssClass: "dmg" },
+        "PhysReduction:percent": { Icon: "🛡️", Title: "Снижение физ. урона", Unit: "%", Description: "Снижает получаемый физический урон", CssClass: "def" },
+
+        "Block:percent": { Icon: "🧱", Title: "Блок", Unit: "%", Description: "Повышение эффективности блока", CssClass: "def" },
+        "Block:percentPoint": { Icon: "🧱", Title: "Шанс блока", Unit: "%", Description: "К шансу блокировать атаку", CssClass: "def" },
+    };
+
+    /**
+     * Капстоуны — сопоставление по Id из JSON.
+     * Если добавишь новый капстоун в JSON — добавь запись сюда.
+     */
+    private bonusKeystoneResources: Record<string, IBonusView> = {
+        blood_and_sand: {
+            Icon: "🩸", Title: "Кровь и песок",
+            Unit: "", Description: "Огромный физический урон ценой живучести",
+            CssClass: "dmg",
+        },
+
+        glass_cannon: {
+            Icon: "💥", Title: "Стеклянная пушка",
+            Unit: "", Description: "Стихии бьют сильнее, но броня тает",
+            CssClass: "dmg",
+        },
+
+        berserker_rage: {
+            Icon: "🔥", Title: "Ярость берсерка",
+            Unit: "", Description: "Скорость атаки в обмен на сопротивления",
+            CssClass: "spd",
+        },
+
+        heavy_armour: {
+            Icon: "🛡️", Title: "Тяжёлый доспех",
+            Unit: "", Description: "Максимум брони, минимум мобильности",
+
+            CssClass: "def",
+        },
+        light_step: {
+            Icon: "💨", Title: "Лёгкий шаг",
+            Unit: "", Description: "Уклонение в обмен на броню",
+            CssClass: "def",
+        },
+
+        crystal_heart: {
+            Icon: "🔷", Title: "Кристальное сердце",
+            Unit: "", Description: "Огромный энергощит ценой здоровья",
+            CssClass: "def",
+        },
+
+        pyromancer: {
+            Icon: "🔥", Title: "Пиромант",
+            Unit: "", Description: "Огонь сильнее, холод слабее",
+            CssClass: "fire",
+        },
+
+        cryomancer: {
+            Icon: "❄️", Title: "Криомант",
+            Unit: "", Description: "Холод сильнее, огонь слабее",
+            CssClass: "cold",
+        },
+
+        electromancer: {
+            Icon: "⚡", Title: "Электромант",
+            Unit: "", Description: "Молния сильнее, огонь слабее",
+            CssClass: "light",
+        },
+
+        double_strike: {
+            Icon: "⚔️", Title: "Двойной удар",
+            Unit: "", Description: "Скорость атаки в обмен на силу удара",
+            CssClass: "spd",
+        },
+
+        glass_resist: {
+            Icon: "💠", Title: "Хрупкость стихий",
+            Unit: "", Description: "Сопротивления в обмен на здоровье",
+            CssClass: "res",
+        },
+
+        crit_lord: {
+            Icon: "💥", Title: "Владыка критов",
+            Unit: "", Description: "Критический урон в обмен на скорость",
+            CssClass: "crit",
+        },
+
+        precision_strike: {
+            Icon: "🎯", Title: "Точный удар",
+            Unit: "", Description: "Точность и крит в обмен на урон",
+            CssClass: "crit",
+        },
+
+        thorned_hide: {
+            Icon: "🌵", Title: "Терновая кожа",
+            Unit: "", Description: "Отражает урон ценой здоровья",
+            CssClass: "dmg",
+        },
+
+        stun_lord: {
+            Icon: "💫", Title: "Владыка оглушения",
+            Unit: "", Description: "Оглушение в обмен на скорость атаки",
+            CssClass: "crit",
+        },
+
+        block_master: {
+            Icon: "🧱", Title: "Мастер блока",
+            Unit: "", Description: "Блок в обмен на уклонение",
+            CssClass: "def",
+        },
+
+        es_overflow: {
+            Icon: "🔷", Title: "Переполнение щита",
+            Unit: "", Description: "Регенерация щита в обмен на его запас",
+            CssClass: "def",
+        },
+    };
+
 
     constructor(
         private ticker: Ticker,
@@ -502,7 +493,7 @@ class UI
 
     private GetEffectUnit(e: IBonusEffect): string
     {
-        return BonusStatResources[`${e.Type}:${e.Mod}`]?.Unit ?? "";
+        return this.bonusStatResources[`${e.Type}:${e.Mod}`]?.Unit ?? "";
     }
 
     private FormatEffect(e: IBonusEffect): string
@@ -519,7 +510,7 @@ class UI
 
     private GetBonusView(bonus: IBonus): IBonusView | undefined
     {
-        if (bonus.IsKeystone) return BonusKeystoneResources[bonus.Id] ?? {
+        if (bonus.IsKeystone) return this.bonusKeystoneResources[bonus.Id] ?? {
             Icon: "❓",
             Title: bonus.Id,
             Unit: "",
@@ -528,7 +519,7 @@ class UI
         };
 
         const key = `${bonus.Primary.Type}:${bonus.Primary.Mod}`;
-        return BonusStatResources[`${bonus.Primary.Type}:${bonus.Primary.Mod}`] ?? {
+        return this.bonusStatResources[`${bonus.Primary.Type}:${bonus.Primary.Mod}`] ?? {
             Icon: "❓",
             Title: key,
             Unit: "",

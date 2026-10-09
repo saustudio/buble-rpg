@@ -39,10 +39,8 @@
     { "type": "CriticalChance",     "mod": "percentPoint", "min": 2,   "max": 5,   "weight": 0.5 },
     { "type": "CriticalMultiplier", "mod": "flat",         "min": 0.1, "max": 0.4, "weight": 0.5 },
 
-    { "type": "StunInc",       "mod": "percent",      "min": 10, "max": 25, "weight": 0.7 },
-    { "type": "StunInc",       "mod": "percentPoint", "min": 3,  "max": 8,  "weight": 0.6 },
-    { "type": "StunReduction", "mod": "percent",      "min": 10, "max": 25, "weight": 0.7 },
-    { "type": "StunReduction", "mod": "percentPoint", "min": 3,  "max": 8,  "weight": 0.6 },
+    { "type": "Stun",       "mod": "flat",      "min": 10, "max": 25, "weight": 0.7 },
+    { "type": "StunReduction", "mod": "flat",      "min": 10, "max": 25, "weight": 0.7 },
 
     { "type": "PhysReflect",  "mod": "percent", "min": 5,  "max": 15, "weight": 0.6 },
     { "type": "PhysReflect",  "mod": "flat",    "min": 3,  "max": 8,  "weight": 0.5 },

@@ -1015,6 +1015,32 @@
             --glow: rgba(251, 113, 133, 0.6);
         }
 
+        .wave-effects {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            width: 100%;
+            z-index: 1;
+        }
+
+        .wave-effect {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+
+        .wave-effect .wave-effect-label {
+            color: #a8a8c0;
+        }
+
+        .wave-effect .wave-effect-value {
+            font-weight: 800;
+            color: var(--accent);
+            text-shadow: 0 0 12px var(--glow);
+        }
+
         /* ================================================================
    ЭЛЕМЕНТЫ ЛУТА
    ================================================================ */
@@ -1415,11 +1441,11 @@
         <div class="game-wrapper" id="gameWrapper">
             <div class="game-top-bar">
                 <div class="wave-info">
-                    <div class="wave-item">
+                    <!-- <div class="wave-item">
                         <span>⏱️</span>
                         <span>До конца:</span>
                         <span class="value timer-value" id="statWaveTimer">0с</span>
-                    </div>
+                    </div> -->
                     <div class="wave-item">
                         <span>🌊</span>
                         <span>Волна:</span>
@@ -1717,6 +1743,21 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- ============================================================
+                 ДИАЛОГ: ВЫБОР МОДИФИКАТОРА ВОЛНЫ
+                 ============================================================ -->
+                <div class="ui-dialog-overlay" id="dlg-wave" data-dialog="wave" data-dismissable="false">
+                    <div class="ui-dialog" data-size="lg">
+                        <div class="ui-dialog-header">
+                            <div class="ui-dialog-line"></div>
+                            <h2 class="ui-dialog-title">🌊 ВОЛНА ПРОЙДЕНА!</h2>
+                            <div class="ui-dialog-line"></div>
+                        </div>
+                        <div class="ui-dialog-sub">Выберите усиление для следующей волны</div>
+                        <div class="ui-dialog-body"></div>
                     </div>
                 </div>
 

@@ -1,5 +1,5 @@
-import { Logger, IRenderer, System, World, Graphics, Ticker } from "./core";
-import { GameStateComponent, EGameState } from "./gamestate";
+import { EntityId, IRenderer, System, World, Graphics, Ticker } from "./core";
+import { GameStateComponent, EGameState, GameStateService } from "./gamestate";
 import { HealthComponent } from "./health";
 import { Transform2DComponent, VelocityComponent } from "./movement";
 import { RigidbodyComponent } from "./physics";
@@ -7,32 +7,202 @@ import { EntityStatsComponent, EntityStatsService, IEntityStats, RawStats } from
 import { EquipmentComponent, Equipment, EquipmentService } from "./equipment";
 import { EItemTag, ItemFactory, EAffixType } from "./items";
 import { FractionComponent, PursuerComponent } from "./targeting";
+import { UIDialog } from "./dialog";
+import waveData from "../data/wave.json";
 
 declare const PIXI: any;
 
 export enum ESpawnEntityClass { WARIOR, ASSASIN, MONC }
+
+//#region ФИЧА: волны — данные
+
+export enum EWaveEffectType
+{
+    MONSTER_COUNT = "MonsterCount",
+    MONSTER_LEVEL = "MonsterLevel",
+    MONSTER_HEALTH = "MonsterHealth",
+    MONSTER_DAMAGE = "MonsterDamage",
+    MONSTER_SPEED = "MonsterSpeed",
+    MONSTER_RESIST = "MonsterResist",
+    SPAWN_SPEED = "SpawnSpeed",
+    ELITE_CHANCE = "EliteChance",
+    ITEM_QUANTITY = "ItemQuantity",
+    ITEM_RARITY = "ItemRarity",
+}
+
+export enum EWaveValueType
+{
+    FLAT = "flat",
+    PERCENT = "percent",
+    PERCENT_POINT = "percentPoint",
+}
+
+/** Эффект модификатора: и хранилище (wave.json), и рантайм — один тип. */
+export interface IWaveEffect
+{
+    Type: EWaveEffectType;
+    ValueType: EWaveValueType;
+    Min: number;
+    Max: number;
+}
+
+/** Модификатор волны: и хранилище (wave.json), и рантайм — один тип. */
+export interface IWaveModifier
+{
+    Id: string;
+    Weight: number;
+    Effects: IWaveEffect[];
+}
+
+interface IWaveStats
+{
+    MaxCount: number;
+    MonsterLevel: number;
+    SpawnInterval: number;
+    HealthMult: number;
+    DamageMult: number;
+    SpeedMult: number;
+    Resist: number;
+    EliteChance: number;
+    ItemQuantityMult: number;
+    ItemRarityBonus: number;
+}
+
+//#endregion
+
 export class SpawnEntityComponent { Type: ESpawnEntityClass; constructor(public Power: number) { } }
+
 export class SpawnComponent
 {
-    Lvl: number = 0;
+    Lvl: number = 1;
     Max: number = 0;
     Current: number = 0;
     Killed: number = 0;
     SpawnTimer: number = 0;
-    DurationTimer: number = 0;
     PrepareTimer: number = 2;
+    Modifiers: IWaveModifier[] = [];
+}
+
+/** Сигнал «волна пройдена, ждём выбор модификатора». */
+export class WaveChooseComponent
+{
+    Offers: IWaveModifier[] = [];
+    Chosen: IWaveModifier | null = null;
+}
+
+/** Логика волны: ролл предложений и пересчёт итогов по модели данных (без ECS). */
+export class WaveService
+{
+    private static readonly BASE_MAX = 6;
+    private static readonly BASE_MONSTER_LEVEL = 1;
+    private static readonly BASE_SPAWN_INTERVAL = 2;
+    private static readonly MIN_SPAWN_INTERVAL = 0.3;
+
+    public RollMods(count: number): IWaveModifier[]
+    {
+        const pool = [...(waveData as IWaveModifier[])];
+        const result: IWaveModifier[] = [];
+
+        for (let i = 0; i < count && pool.length > 0; i++)
+        {
+            const picked = this.PickWeighted(pool);
+            pool.splice(pool.indexOf(picked), 1);
+            result.push(this.RollMod(picked));
+        }
+
+        return result;
+    }
+
+    public Stats(modifiers: IWaveModifier[]): IWaveStats
+    {
+        let countFlat = 0, countPercent = 0;
+        let monsterLevel = 0;
+        let healthPercent = 0, damagePercent = 0;
+        let speedPoint = 0, spawnSpeedPercent = 0;
+        let resistPoint = 0, elitePoint = 0;
+        let itemQuantityPercent = 0, itemRarityPercent = 0;
+
+        for (const modifier of modifiers)
+        {
+            for (const effect of modifier.Effects)
+            {
+                switch (effect.Type)
+                {
+                    case EWaveEffectType.MONSTER_COUNT:
+                        if (effect.ValueType === EWaveValueType.FLAT) countFlat += effect.Min;
+                        else countPercent += effect.Min;
+                        break;
+                    case EWaveEffectType.MONSTER_LEVEL: monsterLevel += effect.Min; break;
+                    case EWaveEffectType.MONSTER_HEALTH: healthPercent += effect.Min; break;
+                    case EWaveEffectType.MONSTER_DAMAGE: damagePercent += effect.Min; break;
+                    case EWaveEffectType.MONSTER_SPEED: speedPoint += effect.Min; break;
+                    case EWaveEffectType.SPAWN_SPEED: spawnSpeedPercent += effect.Min; break;
+                    case EWaveEffectType.MONSTER_RESIST: resistPoint += effect.Min; break;
+                    case EWaveEffectType.ELITE_CHANCE: elitePoint += effect.Min; break;
+                    case EWaveEffectType.ITEM_QUANTITY: itemQuantityPercent += effect.Min; break;
+                    case EWaveEffectType.ITEM_RARITY: itemRarityPercent += effect.Min; break;
+                }
+            }
+        }
+
+        const maxCount = Math.max(1, Math.round((WaveService.BASE_MAX + countFlat) * (1 + countPercent / 100)));
+        const spawnInterval = Math.max(WaveService.MIN_SPAWN_INTERVAL, WaveService.BASE_SPAWN_INTERVAL / (1 + spawnSpeedPercent / 100));
+
+        return {
+            MaxCount: maxCount,
+            MonsterLevel: WaveService.BASE_MONSTER_LEVEL + monsterLevel,
+            SpawnInterval: spawnInterval,
+            HealthMult: 1 + healthPercent / 100,
+            DamageMult: 1 + damagePercent / 100,
+            SpeedMult: 1 + speedPoint / 100,
+            Resist: Math.min(75, resistPoint),
+            EliteChance: Math.max(0, Math.min(0.9, elitePoint / 100)),
+            ItemQuantityMult: 1 + itemQuantityPercent / 100,
+            ItemRarityBonus: itemRarityPercent,
+        };
+    }
+
+    private PickWeighted(items: IWaveModifier[]): IWaveModifier
+    {
+        const total = items.reduce((s, entry) => s + entry.Weight, 0);
+        let roll = Math.random() * total;
+        let picked = items[items.length - 1];
+
+        for (const entry of items)
+        {
+            roll -= entry.Weight;
+            if (roll <= 0) { picked = entry; break; }
+        }
+
+        return picked;
+    }
+
+    /** Коллапсит диапазон Min/Max в одно значение — далее везде Min === Max. */
+    private RollMod(modifier: IWaveModifier): IWaveModifier
+    {
+        return {
+            Id: modifier.Id,
+            Weight: modifier.Weight,
+            Effects: modifier.Effects.map((e) =>
+            {
+                const value = this.RollValue(e.Min, e.Max);
+                return { Type: e.Type, ValueType: e.ValueType, Min: value, Max: value };
+            }),
+        };
+    }
+
+    private RollValue(min: number, max: number): number
+    {
+        const raw = min + Math.random() * (max - min);
+        return Math.abs(max) <= 5 ? Math.round(raw * 100) / 100 : Math.round(raw);
+    }
 }
 
 //#region ФИЧА: монстры
 
 class SpawnSystem implements System
 {
-    private readonly WAVE_DURATION = 60; // полная длительность
-
-    constructor()
-    {
-
-    }
+    private readonly waveService = new WaveService();
 
     public Update(deltaTime: number): void
     {
@@ -43,58 +213,55 @@ class SpawnSystem implements System
         const deathList = World.EntityQuery(SpawnEntityComponent, HealthComponent).filter(e => World.GetComponent(e, HealthComponent)!.LifeCurrent <= 0);
         for (const entity of deathList) World.EntityRemove(entity);
 
-        let waveEntity = World.EntityFirst(SpawnComponent);
+        let spawnEntity = World.EntityFirst(SpawnComponent);
 
         if (gameState.State == EGameState.INIT)
         {
-            if (waveEntity) { World.EntityRemove(waveEntity); waveEntity = null; }
+            if (spawnEntity) { World.EntityRemove(spawnEntity); spawnEntity = null; }
             const entityList = World.EntityQuery(SpawnEntityComponent);
             for (const entity of entityList) World.EntityRemove(entity);
         }
 
-        if (waveEntity === null) waveEntity = World.EntityCreate().SetComponent(new SpawnComponent()).Entity;
-
-        const wave = World.GetComponent(waveEntity, SpawnComponent)!;
-        //время для новой волны
-        if (wave.DurationTimer <= 0)
+        if (spawnEntity === null)
         {
-            wave.Lvl++;
-            wave.Max = Math.min(5 + wave.Lvl * 1.5, 30);
-            wave.Current = 0;
-            wave.Killed = 0;
-            wave.SpawnTimer = 2;
-            wave.PrepareTimer = 2;
-            wave.DurationTimer = this.WAVE_DURATION;
-            return;
+            spawnEntity = World.EntityCreate().SetComponent(new SpawnComponent()).Entity;
+            const created = World.GetComponent(spawnEntity, SpawnComponent)!;
+            created.Max = this.waveService.Stats(created.Modifiers).MaxCount;
         }
 
-        //время на подготовку к влоне
+        const wave = World.GetComponent(spawnEntity, SpawnComponent)!;
+
+        // волна пройдена — спавн останавливается, ждём выбор модификатора от UI
+        if (World.GetComponent(spawnEntity, WaveChooseComponent)) return;
+
+        // время на подготовку к волне
         if (wave.PrepareTimer > 0)
         {
             wave.PrepareTimer = Math.max(0, wave.PrepareTimer - deltaTime);
             return;
         }
 
-        wave.DurationTimer = Math.max(0, wave.DurationTimer - deltaTime);
+        const totals = this.waveService.Stats(wave.Modifiers);
 
         // Спавним врагов
         wave.SpawnTimer -= deltaTime;
         if (wave.SpawnTimer <= 0 && wave.Current < wave.Max)
         {
-            this.SpawnEnemy(wave);
+            this.SpawnEnemy(wave, totals);
             wave.Current++;
-            wave.SpawnTimer = 2;//TODO подумать над спавн таймером Math.max(0.15, 1 - wave.level * 0.03);
+            wave.SpawnTimer = totals.SpawnInterval;
         }
 
-        // Если всех заспавнили и врагов не осталось - завершаем волну
-        if (wave.Current >= wave.Max)
+        // Все враги заспавнены и убиты — предлагаем бонус на следующую волну
+        if (wave.Current >= wave.Max && World.EntityQuery(SpawnEntityComponent).length === 0)
         {
-            const enemiesAlive = World.EntityQuery(SpawnEntityComponent).length;
-            if (enemiesAlive === 0) wave.DurationTimer = 0;
+            const choose = new WaveChooseComponent();
+            choose.Offers = this.waveService.RollMods(3);
+            World.SetComponent(spawnEntity, choose);
         }
     }
 
-    private SpawnEnemy(wave: SpawnComponent): void
+    private SpawnEnemy(wave: SpawnComponent, totals: IWaveStats): void
     {
 
         const entity = World.EntityCreate()
@@ -111,32 +278,38 @@ class SpawnSystem implements System
         } as Record<ESpawnEntityClass, { BaseHP: number, Size: number, MoveSpeed: number, Str: number, Dex: number, Int: number }>;
 
 
-        const bossMult = wave.Lvl % 5 === 0 && wave.Current == 0 ? 3 : 1;
+        const bossMult = wave.Lvl % 5 === 0 && wave.Current === 0 ? 3 : 1;
+        const eliteMult = Math.random() < totals.EliteChance ? 2 : 1;
+        const powerMult = bossMult * eliteMult;
 
         let entityType = ESpawnEntityClass.WARIOR; // Math.floor(Math.random() * 3) as ESpawnEntityClass; // 0, 1, 2
         const rand = Math.random();
         if (wave.Lvl > 2 && rand < 0.30) entityType = ESpawnEntityClass.MONC;
         if (wave.Lvl > 4 && rand < 0.10) entityType = ESpawnEntityClass.ASSASIN;
 
+        const monsterLevel = totals.MonsterLevel;
         const baseStats = EntityStatsService.Default();
-        baseStats.Str = spawnConfig[entityType].Str + wave.Lvl * bossMult;
-        baseStats.Dex = spawnConfig[entityType].Dex + wave.Lvl * bossMult;
-        baseStats.Int = spawnConfig[entityType].Int + wave.Lvl * bossMult;
-        baseStats.LifeMax = spawnConfig[entityType].BaseHP * bossMult;
-        baseStats.MovementSpeed = spawnConfig[entityType].MoveSpeed;
+        baseStats.Str = (spawnConfig[entityType].Str + monsterLevel * powerMult) * totals.DamageMult;
+        baseStats.Dex = (spawnConfig[entityType].Dex + monsterLevel * powerMult) * totals.DamageMult;
+        baseStats.Int = (spawnConfig[entityType].Int + monsterLevel * powerMult) * totals.DamageMult;
+        baseStats.LifeMax = spawnConfig[entityType].BaseHP * powerMult * totals.HealthMult;
+        baseStats.MovementSpeed = spawnConfig[entityType].MoveSpeed * totals.SpeedMult;
+        baseStats.FireResist = totals.Resist;
+        baseStats.ColdResist = totals.Resist;
+        baseStats.LightResist = totals.Resist;
 
 
         //подбор подходящей экипировки
-        const equipment = this.EquipmentEnemy(wave.Lvl, baseStats.Str, baseStats.Dex, baseStats.Int);
-        const size = spawnConfig[entityType].Size + bossMult * 5;
-        const mass = 50 * bossMult;
+        const equipment = this.EquipmentEnemy(monsterLevel, baseStats.Str, baseStats.Dex, baseStats.Int, totals);
+        const size = spawnConfig[entityType].Size + powerMult * 5;
+        const mass = 50 * powerMult;
 
         const rawStats = new RawStats();
         for (const item of EquipmentService.All(equipment.Equipment))
             for (const [type, value] of item.Final) rawStats.Add(EntityStatsService.AffixToRaw(type as EAffixType, value));
         const finalStats = EntityStatsService.Resolve(rawStats, baseStats);
 
-        const power = this.SpawnEnemyPower(finalStats);
+        const power = this.EnemyPower(finalStats);
 
         // ----- БЛОК ПОЗИЦИОНИРОВАНИЯ (спавн за пределами арены) -----
         const areaWidth = Graphics.Width;
@@ -164,7 +337,7 @@ class SpawnSystem implements System
         World.SetComponent(entity, equipment);
     }
 
-    private SpawnEnemyPower(stats: IEntityStats): number
+    private EnemyPower(stats: IEntityStats): number
     {
         // helpers
         const avg = (min: number, max: number) => (min + max) * 0.5;
@@ -206,12 +379,12 @@ class SpawnSystem implements System
         return dpsScore + ehpScore;
     }
 
-    private EquipmentEnemy(level: number, str: number, dex: number, int: number): EquipmentComponent
+    private EquipmentEnemy(level: number, str: number, dex: number, int: number, waveStats: IWaveStats): EquipmentComponent
     {
         // раритет экипировки с зависимостью от уровня
         // чем выше level, тем больше шанс высокого раритета
         const maxLevel = 50;
-        const t = Math.min(1, Math.max(0, level / maxLevel)); // 0..1
+        const t = Math.min(1, Math.max(0, level / maxLevel + waveStats.ItemRarityBonus / 100)); // 0..1
 
         // Базовые пороги: rarity=0 при roll < p0, rarity=1 при roll < p1, иначе rarity=2
         // С ростом уровня p0 и p1 уменьшаются => выше шанс rarity=2
@@ -266,7 +439,7 @@ class SpawnSystem implements System
         for (const slot of slots)
         {
             if (equippedExtra >= targetExtra) break;
-            if (Math.random() > slot.chance) continue;
+            if (Math.random() > Math.min(1, slot.chance * waveStats.ItemQuantityMult)) continue;
 
             const item = ItemFactory.Random(level, slot.tag, str, dex, int);
             if (item)
@@ -371,17 +544,60 @@ class SpawnRenderer implements IRenderer
 }
 
 
+interface IWaveModifierView
+{
+    Icon: string;
+    Title: string;
+    Description: string;
+    CssClass: string;
+}
+
 class UI
 {
+    private static readonly PAUSE_SOURCE = "dialog:wave";
+
+    private static readonly WaveEffectLabels: Record<EWaveEffectType, string> = {
+        [EWaveEffectType.MONSTER_COUNT]: "Кол-во врагов",
+        [EWaveEffectType.MONSTER_LEVEL]: "Уровень монстров",
+        [EWaveEffectType.MONSTER_HEALTH]: "Здоровье монстров",
+        [EWaveEffectType.MONSTER_DAMAGE]: "Урон монстров",
+        [EWaveEffectType.MONSTER_SPEED]: "Скорость монстров",
+        [EWaveEffectType.MONSTER_RESIST]: "Сопр. монстров",
+        [EWaveEffectType.SPAWN_SPEED]: "Скорость спавна",
+        [EWaveEffectType.ELITE_CHANCE]: "Шанс элиты",
+        [EWaveEffectType.ITEM_QUANTITY]: "Кол-во предметов",
+        [EWaveEffectType.ITEM_RARITY]: "Редкость предметов",
+    };
+
+    private static readonly WaveResources: Record<string, IWaveModifierView> = {
+        horde: { Icon: "👥", Title: "Орда", Description: "В волне заметно больше врагов", CssClass: "dmg" },
+        legion: { Icon: "👥", Title: "Легион", Description: "К волне добавляются новые враги", CssClass: "dmg" },
+        veterans: { Icon: "⬆️", Title: "Ветераны", Description: "Монстры приходят более высокого уровня", CssClass: "crit" },
+        toughened: { Icon: "🛡️", Title: "Закалённые", Description: "У монстров больше здоровья", CssClass: "def" },
+        savage: { Icon: "⚔️", Title: "Свирепость", Description: "Монстры наносят больше урона", CssClass: "fire" },
+        swift: { Icon: "💨", Title: "Стремительные", Description: "Монстры быстрее, а спавн чаще", CssClass: "spd" },
+        surge: { Icon: "⚡", Title: "Прорыв", Description: "Враги появляются почти без паузы", CssClass: "spd" },
+        warded: { Icon: "🔷", Title: "Защищённые", Description: "У монстров выше сопротивления", CssClass: "res" },
+        greed: { Icon: "💰", Title: "Алчность", Description: "Больше врагов и больше добычи", CssClass: "light" },
+        avidity: { Icon: "💎", Title: "Жадность", Description: "Больше и качественнее добыча", CssClass: "light" },
+        elite: { Icon: "⭐", Title: "Элита", Description: "Выше шанс элитного монстра", CssClass: "crit" },
+        cursed: { Icon: "☠️", Title: "Проклятые", Description: "Крепкие и стойкие монстры", CssClass: "res" },
+        bloodlust: { Icon: "🩸", Title: "Кровавая жажда", Description: "Жестокие и частые враги", CssClass: "fire" },
+    };
+
     private waveNotification: HTMLElement;
     private waveNumber: HTMLElement;
     private waveSub: HTMLElement;
     private statWave: HTMLElement;
     private statEnemiesLeft: HTMLElement;
-    private statWaveTimer: HTMLElement;
+    private wasChoiceOpen: boolean = false;
 
 
-    constructor(ticker: Ticker)
+    constructor(
+        ticker: Ticker,
+        private gameStateService: GameStateService = new GameStateService(),
+        private waveDialog: UIDialog = new UIDialog("wave"),
+        private waveService: WaveService = new WaveService())
     {
         ticker.OnTick((d) => this.Refresh());
 
@@ -390,13 +606,13 @@ class UI
         this.waveSub = document.getElementById('waveSub')!;
         this.statWave = document.getElementById('statWave')!;
         this.statEnemiesLeft = document.getElementById('statEnemiesLeft')!;
-        this.statWaveTimer = document.getElementById('statWaveTimer')!;
     }
 
     Refresh(): void
     {
         this.ShowStats();
         this.ShowNextWave();
+        this.ShowWaveChoice();
     }
 
     private ShowStats(): void
@@ -405,11 +621,6 @@ class UI
         if (!waveEntity) return;
 
         const wave = World.GetComponent(waveEntity, SpawnComponent)!;
-
-        const displayTime = Math.max(0, Math.ceil(wave.DurationTimer));
-        this.statWaveTimer.textContent = displayTime + 'с';
-        this.statWaveTimer.className = 'stat-value timer-value';
-        if (displayTime <= 5) this.statWaveTimer.classList.add('warning');
 
         const enemiesAlive = World.EntityQuery(SpawnEntityComponent).length;
         this.statWave.textContent = String(wave.Lvl || 1);
@@ -425,7 +636,7 @@ class UI
         const isPreparing = wave.PrepareTimer > 0;
         const isAlreadyShown = this.waveNotification.classList.contains('show');
 
-        if (isAlreadyShown && !isPreparing) 
+        if (isAlreadyShown && !isPreparing)
         {
             this.waveNotification.classList.remove('show');
             return;
@@ -438,6 +649,101 @@ class UI
             this.waveSub.textContent = isBossWave ? '👑 БОСС ИДЁТ!' : `⚔️ ${wave.Max} врагов`;
             this.waveNotification.classList.add('show');
         }
+    }
+
+    private ShowWaveChoice(): void
+    {
+        const gameState = World.SingleComponent(GameStateComponent)!.GameState;
+        if (gameState.State === EGameState.OVER) return;
+
+        const spawnEntity = World.EntityFirst(SpawnComponent, WaveChooseComponent);
+
+        // выбор сделан — закрываем диалог и снимаем паузу
+        if (this.wasChoiceOpen && !spawnEntity)
+        {
+            this.wasChoiceOpen = false;
+            this.waveDialog.Close();
+            this.gameStateService.Resume(gameState, UI.PAUSE_SOURCE);
+            return;
+        }
+
+        if (!spawnEntity) return;
+        if (this.waveDialog.Visibled) return;
+
+        const choose = World.GetComponent(spawnEntity, WaveChooseComponent)!;
+        if (choose.Offers.length === 0) return;
+
+        this.waveDialog.Open();
+        this.wasChoiceOpen = true;
+        this.gameStateService.Pause(gameState, UI.PAUSE_SOURCE);
+        this.ShowOffers(spawnEntity, choose);
+    }
+
+    private ShowOffers(spawnEntity: EntityId, choose: WaveChooseComponent): void
+    {
+        this.waveDialog.Container.innerHTML = '';
+
+        const cardContainer = document.createElement("div");
+        cardContainer.className = "bonus-cards";
+
+        for (const mod of choose.Offers)
+        {
+            const card = this.BuildWaveCard(mod);
+            card.addEventListener("click", () =>
+            {
+                const wave = World.GetComponent(spawnEntity, SpawnComponent)!;
+                wave.Modifiers.push(mod);
+
+                wave.Lvl++;
+                wave.Current = 0;
+                wave.Killed = 0;
+                wave.SpawnTimer = 0;
+                wave.PrepareTimer = 2;
+                wave.Max = this.waveService.Stats(wave.Modifiers).MaxCount;
+
+
+                World.RemoveComponent(spawnEntity, WaveChooseComponent);
+            });
+
+            cardContainer.appendChild(card);
+        }
+
+        this.waveDialog.Container.appendChild(cardContainer);
+    }
+
+    private BuildWaveCard(offer: IWaveModifier): HTMLElement
+    {
+        const view = UI.WaveResources[offer.Id] ?? {
+            Icon: "❓",
+            Title: offer.Id,
+            Description: "Модификатор волны",
+            CssClass: "",
+        };
+
+        const effectLines = offer.Effects
+            .map((e) =>
+            {
+                const label = UI.WaveEffectLabels[e.Type] ?? e.Type;
+                return `<div class="wave-effect"><span class="wave-effect-label">${label}</span><span class="wave-effect-value">${this.FormatWaveEffect(e)}</span></div>`;
+            })
+            .join("");
+
+        const card = document.createElement("div");
+        card.className = `bonus-card ${view.CssClass}`;
+        card.innerHTML = `
+            <div class="bonus-icon">${view.Icon}</div>
+            <div class="bonus-title">${view.Title}</div>
+            <div class="wave-effects">${effectLines}</div>
+            <div class="bonus-desc">${view.Description}</div>`;
+
+        return card;
+    }
+
+    private FormatWaveEffect(effect: IWaveEffect): string
+    {
+        const sign = effect.Min >= 0 ? "+" : "";
+        if (effect.ValueType === EWaveValueType.PERCENT || effect.ValueType === EWaveValueType.PERCENT_POINT) return `${sign}${effect.Min}%`;
+        return `${sign}${effect.Min}`;
     }
 
 }
