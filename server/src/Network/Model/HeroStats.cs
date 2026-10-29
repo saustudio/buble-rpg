@@ -1,0 +1,28 @@
+namespace BubleRpg.Network.Model;
+
+public sealed record HeroStats(
+    double PhysicalDamageMin,
+    double PhysicalDamageMax,
+    double FireDamageMin,
+    double FireDamageMax,
+    double ColdDamageMin,
+    double ColdDamageMax,
+    double LightDamageMin,
+    double LightDamageMax,
+    double AttackSpeed,
+    double Accuracy,
+    double CriticalChance,
+    double CriticalMultiplier,
+    double Stun,
+    double StunReduction,
+    double LifePerSecond,
+    double LifePerKill,
+    double Armour,
+    double PhysReduction,
+    double Evasion,
+    double Block,
+    double PhysReflect,
+    double FireResist,
+    double ColdResist,
+    double LightResist,
+    double MovementSpeed);

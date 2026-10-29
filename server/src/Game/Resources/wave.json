@@ -1,0 +1,100 @@
+﻿[
+  {
+    "Id": "horde",
+    "Weight": 1.0,
+    "Effects": [
+      { "Type": "MonsterCount", "ValueType": "percent", "Min": 25, "Max": 40 }
+    ]
+  },
+  {
+    "Id": "legion",
+    "Weight": 0.8,
+    "Effects": [
+      { "Type": "MonsterCount", "ValueType": "flat", "Min": 2, "Max": 4 }
+    ]
+  },
+  {
+    "Id": "veterans",
+    "Weight": 0.9,
+    "Effects": [
+      { "Type": "MonsterLevel", "ValueType": "flat", "Min": 1, "Max": 2 }
+    ]
+  },
+  {
+    "Id": "toughened",
+    "Weight": 1.0,
+    "Effects": [
+      { "Type": "MonsterHealth", "ValueType": "percent", "Min": 20, "Max": 40 }
+    ]
+  },
+  {
+    "Id": "savage",
+    "Weight": 1.0,
+    "Effects": [
+      { "Type": "MonsterDamage", "ValueType": "percent", "Min": 15, "Max": 30 }
+    ]
+  },
+  {
+    "Id": "swift",
+    "Weight": 0.8,
+    "Effects": [
+      { "Type": "MonsterSpeed", "ValueType": "percentPoint", "Min": 10, "Max": 20 },
+      { "Type": "SpawnSpeed", "ValueType": "percent", "Min": 15, "Max": 30 }
+    ]
+  },
+  {
+    "Id": "surge",
+    "Weight": 0.7,
+    "Effects": [
+      { "Type": "SpawnSpeed", "ValueType": "percent", "Min": 25, "Max": 45 },
+      { "Type": "MonsterSpeed", "ValueType": "percentPoint", "Min": 5, "Max": 12 }
+    ]
+  },
+  {
+    "Id": "warded",
+    "Weight": 0.8,
+    "Effects": [
+      { "Type": "MonsterResist", "ValueType": "percentPoint", "Min": 15, "Max": 25 }
+    ]
+  },
+  {
+    "Id": "greed",
+    "Weight": 0.9,
+    "Effects": [
+      { "Type": "MonsterCount", "ValueType": "percent", "Min": 15, "Max": 25 },
+      { "Type": "ItemQuantity", "ValueType": "percent", "Min": 30, "Max": 60 }
+    ]
+  },
+  {
+    "Id": "avidity",
+    "Weight": 0.8,
+    "Effects": [
+      { "Type": "ItemQuantity", "ValueType": "percent", "Min": 20, "Max": 40 },
+      { "Type": "ItemRarity", "ValueType": "percent", "Min": 20, "Max": 40 }
+    ]
+  },
+  {
+    "Id": "elite",
+    "Weight": 0.7,
+    "Effects": [
+      { "Type": "EliteChance", "ValueType": "percentPoint", "Min": 10, "Max": 20 },
+      { "Type": "ItemRarity", "ValueType": "percent", "Min": 15, "Max": 30 }
+    ]
+  },
+  {
+    "Id": "cursed",
+    "Weight": 0.7,
+    "Effects": [
+      { "Type": "MonsterHealth", "ValueType": "percent", "Min": 15, "Max": 25 },
+      { "Type": "MonsterResist", "ValueType": "percentPoint", "Min": 10, "Max": 18 }
+    ]
+  },
+  {
+    "Id": "bloodlust",
+    "Weight": 0.6,
+    "Effects": [
+      { "Type": "MonsterDamage", "ValueType": "percent", "Min": 25, "Max": 40 },
+      { "Type": "SpawnSpeed", "ValueType": "percent", "Min": 10, "Max": 20 }
+    ]
+  }
+]

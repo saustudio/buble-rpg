@@ -1,0 +1,15 @@
+# ===== .NET =====
+bin/
+obj/
+*.user
+.vs/
+
+# ===== Node / клиент =====
+node_modules/
+
+# Собранный бандл клиента — генерируется таргетом BuildClient (npm ci && npm run build)
+client/src/wwwroot/js/
+
+# ===== OS =====
+Thumbs.db
+.DS_Store

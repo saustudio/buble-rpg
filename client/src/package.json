@@ -1,0 +1,19 @@
+{
+  "name": "buble-rpg-web-client",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && esbuild ClientApp/Main.ts --bundle --format=esm --platform=browser --target=es2022 --sourcemap=linked --sources-content=true --outfile=wwwroot/js/app.js",
+    "build:itch": "npm run build",
+    "watch": "tsc --noEmit --watch"
+  },
+  "dependencies": {
+    "@microsoft/signalr": "^10.0.11",
+    "pixi.js": "7.4.3"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.5",
+    "typescript": "5.9.3"
+  }
+}

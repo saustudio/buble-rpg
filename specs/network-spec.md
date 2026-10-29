@@ -9,12 +9,36 @@
 
 1. ECS никогда не ждёт сеть. Всё, что должно пережить задержку, живёт
    в компонентах (`ExpiresAt`, `dirty`, `Claimed`).
-2. Сеть никогда не пишет в ECS-компоненты. Только читает.
-3. Команды от клиента приходят как события в шину, ECS обрабатывает
-   их как обычный input.
+2. Сеть не пишет в ECS-компоненты в потоке транспорта. Хаб только кладёт
+   запрос в `NetworkDataService`; запись в игровую БД выполняет
+   `NetworkInputService` на потоке игрового цикла, до `GameService`.
+3. Команды клиента — это данные, а не вызовы игровых сервисов. Сеть пишет
+   компонент-запрос (`MoveTarget`, `BonusChoice`, `LootPick`,
+   `HeroSpawnRequest`), решение принимает игровая система.
 4. Единственный контракт между ECS и сетью — компоненты и события.
 5. Сеть — сервис, а не ECS-система, если у неё есть собственное
    состояние (retryQueue, ackTracker, lastSentHash).
+
+## Каркас обмена (сервер)
+
+Слои: Game, Network, Application. Единственная зависимость между Game и
+Network — игровая БД (`GameDataService`) и компоненты.
+
+    SignalR-поток:  GameHub → NetworkDataService (Channel<NetworkData>)
+    поток цикла:    NetworkInputService → GameService → NetworkOutputService
+
+- `NetworkDataService` — временная БД сетевых данных (`NetworkData`).
+- `NetworkInputService` — превращает `NetworkRequest` в компоненты игровой БД.
+- `GameService` — прогоняет `IGameSystem` по порядку регистрации.
+- `NetworkOutputService` — собирает `GameStateResponse` из `GameDataService`
+  и отправляет клиентам событие `"GameState"` (20 Гц).
+- `ApplicationLoopService` — `BackgroundService`, вызывает
+  `IApplicationService.Run(dt)` в порядке регистрации в DI.
+
+Порядок в `Program.cs`:
+
+    NetworkInputService → GameService → NetworkOutputService
+
 
 ## Разделение: система vs сервис
 
@@ -318,7 +342,7 @@ ECS тикает 60 Hz. Сеть — свой ритм (20 Hz или по соб
 
 - ECS-система импортирует `NetworkTransport` или любой сетевой тип.
 - ECS-система вызывает `transport.Send(...)`.
-- Сетевой сервис пишет в ECS-компоненты напрямую.
+- Транспорт (хаб, HTTP-эндпоинт) пишет в ECS-компоненты напрямую.
 - Сетевой сервис вызывает `EquipmentService.Equip(...)` и подобное.
 - Сетевой сервис читает `EquipmentComponent` и логику боя.
 - DTO содержит презентационные поля (css-классы, локализованные строки).
@@ -329,6 +353,8 @@ ECS тикает 60 Hz. Сеть — свой ритм (20 Hz или по соб
 - ECS-система эмитит события в шину (`bus.Emit`).
 - ECS-система создаёт/меняет компоненты с полями для сети
   (`dirty`, `ExpiresAt`, `Claimed`).
+- `NetworkInputService` пишет компоненты-запросы на потоке игрового цикла.
+- `NetworkOutputService` читает игровую БД для сборки DTO на потоке цикла.
 - Сетевой сервис читает любые компоненты (только чтение).
 - Сетевой сервис хранит своё состояние в себе (retryQueue, ackTracker).
 - Сетевой сервис эмитит события в шину.
