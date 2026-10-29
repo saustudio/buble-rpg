@@ -24,4 +24,5 @@ export interface HeroState {
     WeaponName: string | null;
     WeaponRarity: string | null;
     Stats: HeroStats;
+    IsGhost: boolean;
 }

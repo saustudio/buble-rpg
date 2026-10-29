@@ -28,38 +28,50 @@ export class HeroRenderer implements IRenderer
         const state = this.QueryRenderState();
         if (!state) return;
 
-        if (state.Hero) this.RenderOwnHero(state.Hero);
+        // Свой мёртвый герой не рисуется (герой остаётся в мире до респавна).
+        if (state.Hero && state.Hero.LifeCurrent > 0) this.RenderOwnHero(state.Hero);
 
         for (const hero of state.EnemyHeroes) this.RenderEnemyHero(hero);
     }
 
     private RenderOwnHero(hero: HeroState): void
     {
-        this.RenderTarget(hero);
+        // Дух вне боя: без прицела и круга атаки, полупрозрачный.
+        const alpha = hero.IsGhost ? 0.4 : 1;
 
-        AttackRange.Render(
-            hero.X,
-            hero.Y,
-            hero.Size + hero.AttackRange,
-            hero.AttackReady,
-            hero.AttackType);
+        if (!hero.IsGhost)
+        {
+            this.RenderTarget(hero);
 
-        this.RenderBody(hero.X, hero.Y, hero.Size, 0x4a7fc7, 0x151d2b);
-        this.RenderEye(hero.X, hero.Y, hero.Size, Math.atan2(hero.DirY, hero.DirX));
+            AttackRange.Render(
+                hero.X,
+                hero.Y,
+                hero.Size + hero.AttackRange,
+                hero.AttackReady,
+                hero.AttackType);
+        }
+
+        this.RenderBody(hero.X, hero.Y, hero.Size, 0x4a7fc7, 0x151d2b, alpha);
+        this.RenderEye(hero.X, hero.Y, hero.Size, Math.atan2(hero.DirY, hero.DirX), alpha);
         this.RenderHealth(hero);
     }
 
     private RenderEnemyHero(hero: HeroState): void
     {
-        AttackRange.Render(
-            hero.X,
-            hero.Y,
-            hero.Size + hero.AttackRange,
-            hero.AttackReady,
-            hero.AttackType);
+        const alpha = hero.IsGhost ? 0.4 : 1;
 
-        this.RenderBody(hero.X, hero.Y, hero.Size, 0xc77f4a, HeroRenderer.OutlineColor(hero.WeaponRarity));
-        this.RenderEye(hero.X, hero.Y, hero.Size, Math.atan2(hero.DirY, hero.DirX));
+        if (!hero.IsGhost)
+        {
+            AttackRange.Render(
+                hero.X,
+                hero.Y,
+                hero.Size + hero.AttackRange,
+                hero.AttackReady,
+                hero.AttackType);
+        }
+
+        this.RenderBody(hero.X, hero.Y, hero.Size, 0xc77f4a, HeroRenderer.OutlineColor(hero.WeaponRarity), alpha);
+        this.RenderEye(hero.X, hero.Y, hero.Size, Math.atan2(hero.DirY, hero.DirX), alpha);
         this.RenderHealth(hero);
     }
 
@@ -168,28 +180,28 @@ export class HeroRenderer implements IRenderer
         Graphics.ShapeLayer.lineTo(target.X, target.Y);
     }
 
-    private RenderBody(x: number, y: number, radius: number, fillColor: number, outlineColor: number): void
+    private RenderBody(x: number, y: number, radius: number, fillColor: number, outlineColor: number, alpha: number = 1): void
     {
-        Graphics.ShapeLayer.beginFill(fillColor);
+        Graphics.ShapeLayer.beginFill(fillColor, alpha);
         Graphics.ShapeLayer.drawCircle(x, y, radius);
         Graphics.ShapeLayer.endFill();
 
-        Graphics.ShapeLayer.lineStyle(2.5, outlineColor);
+        Graphics.ShapeLayer.lineStyle(2.5, outlineColor, alpha);
         Graphics.ShapeLayer.drawCircle(x, y, radius);
         Graphics.ShapeLayer.lineStyle(2.5, 0x151d2b);
     }
 
-    private RenderEye(x: number, y: number, radius: number, angle: number): void
+    private RenderEye(x: number, y: number, radius: number, angle: number, alpha: number = 1): void
     {
         const eyeOffsetX = Math.cos(angle) * (radius * 0.45);
         const eyeOffsetY = Math.sin(angle) * (radius * 0.45);
 
-        Graphics.ShapeLayer.beginFill(0xf0f8ff);
+        Graphics.ShapeLayer.beginFill(0xf0f8ff, alpha);
         Graphics.ShapeLayer.drawCircle(x + eyeOffsetX - radius * 0.3, y + eyeOffsetY - radius * 0.2, radius * 0.28);
         Graphics.ShapeLayer.drawCircle(x + eyeOffsetX + radius * 0.3, y + eyeOffsetY - radius * 0.2, radius * 0.28);
         Graphics.ShapeLayer.endFill();
 
-        Graphics.ShapeLayer.beginFill(0x1b1f2e);
+        Graphics.ShapeLayer.beginFill(0x1b1f2e, alpha);
         Graphics.ShapeLayer.drawCircle(x + eyeOffsetX - radius * 0.25, y + eyeOffsetY - radius * 0.1, radius * 0.14);
         Graphics.ShapeLayer.drawCircle(x + eyeOffsetX + radius * 0.35, y + eyeOffsetY - radius * 0.1, radius * 0.14);
         Graphics.ShapeLayer.endFill();

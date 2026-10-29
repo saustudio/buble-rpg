@@ -4,48 +4,50 @@ using BubleRpg.Server.Game.Services;
 namespace BubleRpg.Server.Game.Systems;
 
 public sealed class LootSystem(
-    GameDataService store,
-    GameStateService gameStateService,
+    GameDbContext store,
     ILogger<LootSystem> logger) : IGameSystem
 {
     public void Update(double deltaTime)
     {
-        ApplyPicks();
-
-        var gs = gameStateService.Current;
-        if (gs == null || gs.State == EGameState.PAUSE || gs.State == EGameState.OVER) return;
-
-        foreach (var hitEntity in store.Query<AttackHit>())
+        foreach (var gameId in store.GameIds())
         {
-            var hit = store.EntityGet<AttackHit>(hitEntity);
-            var health = store.EntityGet<Health>(hit.Target);
-            if (health == null || health.LifeCurrent > 0) continue;
+            ApplyPicks(gameId);
 
-            var equipment = store.EntityGet<Equipment>(hit.Target);
-            if (equipment == null) continue;
+            var gs = store.Single<GameState>(gameId);
+            if (gs == null || gs.State == EGameState.PAUSE || gs.State == EGameState.OVER) continue;
 
-            var lootList = EquipmentService.All(equipment);
-            if (lootList.Count == 0) continue;
-
-            var loot = store.EntityGet<Loot>(hit.Source);
-            if (loot == null)
+            foreach (var hitEntity in store.Query<AttackHit>(gameId))
             {
-                var map = new Dictionary<int, List<Item>>
+                var hit = store.EntityGet<AttackHit>(hitEntity);
+                var health = store.EntityGet<Health>(hit.Target);
+                if (health == null || health.LifeCurrent > 0) continue;
+
+                var equipment = store.EntityGet<Equipment>(hit.Target);
+                if (equipment == null) continue;
+
+                var lootList = EquipmentService.All(equipment);
+                if (lootList.Count == 0) continue;
+
+                var loot = store.EntityGet<Loot>(hit.Source);
+                if (loot == null)
                 {
-                    [hit.Target] = lootList
-                };
-                store.EntitySet(hit.Source, new Loot(map));
-            }
-            else
-            {
-                loot.ItemList[hit.Target] = lootList;
+                    var map = new Dictionary<int, List<Item>>
+                    {
+                        [hit.Target] = lootList
+                    };
+                    store.EntitySet(hit.Source, new Loot(map));
+                }
+                else
+                {
+                    loot.ItemList[hit.Target] = lootList;
+                }
             }
         }
     }
 
-    private void ApplyPicks()
+    private void ApplyPicks(int gameId)
     {
-        foreach (var (entityId, pick) in store.FindComponents<LootPick>())
+        foreach (var (entityId, pick) in store.FindComponents<LootPick>(gameId))
         {
             // TODO: найти лут героя и надеть предмет.
             logger.LogWarning(

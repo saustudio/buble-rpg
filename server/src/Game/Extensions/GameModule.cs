@@ -7,9 +7,8 @@ public static class GameModule
 {
     public static IServiceCollection AddGame(this IServiceCollection services)
     {
-        services.AddSingleton<GameDataService>();
+        services.AddSingleton<GameDbContext>();
 
-        services.AddSingleton<GameStateService>();
         services.AddSingleton<WaveService>();
         services.AddSingleton<PhysicsService>();
         services.AddSingleton<EquipmentService>();
@@ -19,6 +18,7 @@ public static class GameModule
 
         services.AddSingleton<IGameSystem, MovementSystem>();
         services.AddSingleton<IGameSystem, TargetSystem>();
+        services.AddSingleton<IGameSystem, GhostSystem>();
         services.AddSingleton<IGameSystem, PursueSystem>();
         services.AddSingleton<IGameSystem, RigidbodySystem>();
         services.AddSingleton<IGameSystem, WaveSystem>();

@@ -3,7 +3,7 @@ using BubleRpg.Server.Application.Services;
 
 namespace BubleRpg.Server.Game.Services;
 
-public sealed class EquipmentService(GameDataService store)
+public sealed class EquipmentService(GameDbContext store)
 {
     public Equipment Get(int id)
     {

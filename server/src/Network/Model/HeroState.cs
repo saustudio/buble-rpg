@@ -24,4 +24,5 @@ public sealed record HeroState(
     double EsMax,
     string? WeaponName,
     string? WeaponRarity,
-    HeroStats Stats);
+    HeroStats Stats,
+    bool IsGhost);

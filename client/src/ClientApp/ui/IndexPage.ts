@@ -56,7 +56,7 @@ export class IndexPage
                 new LootUI(new UIDialog("loot")),
                 new ExperienceUI(),
                 new ExperienceBonusUI(new UIDialog("levelup"), this.gameService),
-                new GameOverUI(new UIDialog("gameover"), () => window.location.reload()),
+                new GameOverUI(new UIDialog("gameover"), () => void this.gameService.Respawn()),
             ];
 
         this.events.Subscribe<GameState>(GameEvents.StateChanged, this.OnGameStateChanged.bind(this));

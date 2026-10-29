@@ -8,7 +8,8 @@ namespace BubleRpg.Server.Network.Services;
 
 public sealed class NetworkInputService(
     NetworkDataService data,
-    GameDataService game) : IApplicationService
+    GameDbContext game,
+    GameService games) : IApplicationService
 {
     public void Run(double deltaSeconds)
     {
@@ -19,33 +20,51 @@ public sealed class NetworkInputService(
     {
         switch (entry)
         {
-            case MoveData move:
-                ToMoveTarget(move);
-                break;
-
-            case LevelBonusChoiceData bonus:
-                ToBonusChoice(bonus.Id, bonus.BonusId, EBonusSource.Level);
-                break;
-
-            case WaveBonusChoiceData bonus:
-                ToBonusChoice(bonus.Id, bonus.BonusId, EBonusSource.Wave);
-                break;
-
-            case LootPickData loot:
-                ToLootPick(loot.Id, loot.ItemId);
-                break;
-
             case HeroSpawnData spawn:
-                ToSpawnRequest(spawn.Id);
+                ToSpawnRequest(spawn.Id, spawn.GameId);
+                break;
+
+            case HeroDisconnectData disconnect:
+                games.RemoveParticipant(disconnect.Id);
+                break;
+
+            case HeroActionData action:
+                ToHeroAction(action);
                 break;
         }
     }
 
-    private void ToMoveTarget(MoveData move)
+    /// <summary>Действия участника применяются в контексте его игры.</summary>
+    private void ToHeroAction(HeroActionData action)
+    {
+        var gameId = games.GameOf(action.Id);
+        if (gameId == null) return;
+
+        switch (action)
+        {
+            case MoveData move:
+                ToMoveTarget(gameId.Value, move);
+                break;
+
+            case LevelBonusChoiceData bonus:
+                ToBonusChoice(gameId.Value, bonus.Id, bonus.BonusId, EBonusSource.Level);
+                break;
+
+            case WaveBonusChoiceData bonus:
+                ToBonusChoice(gameId.Value, bonus.Id, bonus.BonusId, EBonusSource.Wave);
+                break;
+
+            case LootPickData loot:
+                ToLootPick(gameId.Value, loot.Id, loot.ItemId);
+                break;
+        }
+    }
+
+    private void ToMoveTarget(int gameId, MoveData move)
     {
         if (!double.IsFinite(move.X) || !double.IsFinite(move.Y)) return;
 
-        var heroId = FindHero(move.Id);
+        var heroId = FindHero(gameId, move.Id);
         if (heroId == null) return;
 
         var target = game.EntityGet<MoveTarget>(heroId.Value);
@@ -59,9 +78,9 @@ public sealed class NetworkInputService(
         target.Y = move.Y;
     }
 
-    private void ToBonusChoice(string participantId, string bonusId, EBonusSource source)
+    private void ToBonusChoice(int gameId, string participantId, string bonusId, EBonusSource source)
     {
-        var heroId = FindHero(participantId);
+        var heroId = FindHero(gameId, participantId);
         if (heroId == null) return;
 
         var choice = game.EntityGet<BonusChoice>(heroId.Value);
@@ -75,9 +94,9 @@ public sealed class NetworkInputService(
         choice.Source = source;
     }
 
-    private void ToLootPick(string participantId, string itemId)
+    private void ToLootPick(int gameId, string participantId, string itemId)
     {
-        var heroId = FindHero(participantId);
+        var heroId = FindHero(gameId, participantId);
         if (heroId == null) return;
 
         var pick = game.EntityGet<LootPick>(heroId.Value);
@@ -90,15 +109,17 @@ public sealed class NetworkInputService(
         pick.ItemId = itemId;
     }
 
-    private void ToSpawnRequest(string participantId)
+    private void ToSpawnRequest(string participantId, int? preferredGameId)
     {
-        var entity = game.EntityCreate();
+        var gameId = games.ResolveSpawnGame(participantId, preferredGameId);
+
+        var entity = game.EntityCreate(gameId);
         game.EntitySet(entity, new HeroSpawnRequest { Id = participantId });
     }
 
-    private int? FindHero(string participantId)
+    private int? FindHero(int gameId, string participantId)
     {
-        foreach (var (entityId, hero) in game.FindComponents<Hero>())
+        foreach (var (entityId, hero) in game.FindComponents<Hero>(gameId))
         {
             if (hero.Id == participantId) return entityId;
         }

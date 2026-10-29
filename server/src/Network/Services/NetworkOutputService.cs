@@ -7,9 +7,10 @@ using BubleRpg.Server.Game.Services;
 namespace BubleRpg.Server.Network.Services;
 
 public sealed class NetworkOutputService(
-    GameDataService game,
+    GameDbContext gameData,
     EntityAttributesService attrService,
-    GameClientService clients) : IApplicationService
+    GameClientService clients,
+    GameService games) : IApplicationService
 {
     private const double Interval = 1.0 / 20.0;
 
@@ -23,18 +24,43 @@ public sealed class NetworkOutputService(
 
         elapsed = 0;
 
-        var monsters = ToMonsters();
-        var wave = ToWave();
+        foreach (var (gameId, connections) in GroupConnections())
+        {
+            var monsters = MapMonsters(gameId);
+            var wave = MapWave(gameId);
+
+            foreach (var (connectionId, participantId) in connections)
+            {
+                var response = ToResponse(gameId, participantId, monsters, wave);
+                pending[connectionId] = clients.SendToConnectionAsync(connectionId, response);
+            }
+        }
+
+        PrunePending();
+    }
+
+    /// <summary>Группирует соединения по играм, чтобы срез игры строился один раз на игру.</summary>
+    private Dictionary<int, List<(string ConnectionId, string ParticipantId)>> GroupConnections()
+    {
+        var result = new Dictionary<int, List<(string, string)>>();
 
         foreach (var (connectionId, participantId) in clients.Connections)
         {
             if (pending.TryGetValue(connectionId, out var send) && !send.IsCompleted) continue;
 
-            var response = ToResponse(participantId, monsters, wave);
-            pending[connectionId] = clients.SendToConnectionAsync(connectionId, response);
+            var gameId = games.GameOf(participantId);
+            if (gameId == null) continue;
+
+            if (!result.TryGetValue(gameId.Value, out var list))
+            {
+                list = new List<(string, string)>();
+                result[gameId.Value] = list;
+            }
+
+            list.Add((connectionId, participantId));
         }
 
-        PrunePending();
+        return result;
     }
 
     private void PrunePending()
@@ -47,29 +73,31 @@ public sealed class NetworkOutputService(
         }
     }
 
-    private GameStateResponse ToResponse(string participantId, List<MonsterState> monsters, WaveState? wave)
+    private GameStateResponse ToResponse(int gameId, string participantId, List<MonsterState> monsters, WaveState? wave)
     {
         HeroState? mine = null;
         var enemyHeroes = new List<HeroState>();
         int? enemyTarget = null;
 
-        foreach (var (entityId, hero) in game.FindComponents<Hero>())
+        foreach (var (entityId, hero) in gameData.FindComponents<Hero>(gameId))
         {
-            var state = ToHeroState(entityId);
+            var dtoHero = MapHero(entityId);
 
             if (hero.Id == participantId)
             {
-                mine = state;
-                enemyTarget = game.EntityGet<EnemyHudTarget>(entityId)?.TargetId;
+                // Свой герой отдаётся владельцу даже мёртвым (нужен уровень для окна «ПОРАЖЕНИЕ»).
+                mine = dtoHero;
+                enemyTarget = gameData.EntityGet<EnemyHudTarget>(entityId)?.TargetId;
             }
-            else
+            else if (dtoHero.LifeCurrent > 0)
             {
-                enemyHeroes.Add(state);
+                // Мёртвые чужие герои не отдаются — их никто не рисует.
+                enemyHeroes.Add(dtoHero);
             }
         }
 
         // Фаза мира общая, но конкретному соединению смерть его героя отдаётся как OVER.
-        var phase = game.Single<GameState>()?.State ?? EGameState.INIT;
+        var phase = gameData.Single<GameState>(gameId)?.State ?? EGameState.INIT;
         if (mine != null && mine.LifeCurrent <= 0) phase = EGameState.OVER;
 
         return new GameStateResponse(
@@ -83,17 +111,17 @@ public sealed class NetworkOutputService(
             enemyTarget);
     }
 
-    private HeroState ToHeroState(int id)
+    private HeroState MapHero(int id)
     {
-        var transform = game.EntityGet<Transform2D>(id);
-        var velocity = game.EntityGet<Velocity>(id);
-        var health = game.EntityGet<Health>(id);
-        var experience = game.EntityGet<Experience>(id);
+        var transform = gameData.EntityGet<Transform2D>(id);
+        var velocity = gameData.EntityGet<Velocity>(id);
+        var health = gameData.EntityGet<Health>(id);
+        var experience = gameData.EntityGet<Experience>(id);
         var attributes = attrService.Attributes(id);
-        var body = game.EntityGet<Rigidbody>(id);
-        var attackReady = game.EntityGet<AttackCooldown>(id) == null;
+        var body = gameData.EntityGet<Rigidbody>(id);
+        var attackReady = gameData.EntityGet<AttackCooldown>(id) == null;
 
-        var equipment = game.EntityGet<Equipment>(id);
+        var equipment = gameData.EntityGet<Equipment>(id);
         var weapon = equipment?.Slots[EEquipSlot.WEAPON];
 
         var lifeCurrent = health == null || double.IsNaN(health.LifeCurrent)
@@ -125,7 +153,8 @@ public sealed class NetworkOutputService(
             attributes.ES,
             weapon?.Name,
             weapon == null ? null : Rarity(weapon.Rarity),
-            ToHeroStats(attributes));
+            ToHeroStats(attributes),
+            gameData.EntityHas<Ghost>(id));
     }
 
     private static HeroStats ToHeroStats(EntityAttributes attributes)
@@ -158,28 +187,26 @@ public sealed class NetworkOutputService(
             attributes.MovementSpeed);
     }
 
-    private WaveState? ToWave()
+    private WaveState? MapWave(int gameId)
     {
-        var wave = game.Single<Wave>();
-        return wave == null
-            ? null
-            : new WaveState(wave.Lvl, wave.SpawnMax, wave.Spawned, wave.PrepareTimer);
+        var wave = gameData.Single<Wave>(gameId);
+        return wave == null ? null : new WaveState(wave.Lvl, wave.SpawnMax, wave.Spawned, wave.PrepareTimer);
     }
 
-    private List<MonsterState> ToMonsters()
+    private List<MonsterState> MapMonsters(int gameId)
     {
         var result = new List<MonsterState>();
 
-        foreach (var id in game.Query<Monster, Transform2D, Rigidbody, Health, EntityAttributes>())
+        foreach (var id in gameData.Query<Monster, Transform2D, Rigidbody, Health, EntityAttributes>(gameId))
         {
-            var transform = game.EntityGet<Transform2D>(id);
-            var velocity = game.EntityGet<Velocity>(id);
-            var body = game.EntityGet<Rigidbody>(id);
-            var health = game.EntityGet<Health>(id);
-            var monster = game.EntityGet<Monster>(id);
-            var equipment = game.EntityGet<Equipment>(id);
+            var transform = gameData.EntityGet<Transform2D>(id);
+            var velocity = gameData.EntityGet<Velocity>(id);
+            var body = gameData.EntityGet<Rigidbody>(id);
+            var health = gameData.EntityGet<Health>(id);
+            var monster = gameData.EntityGet<Monster>(id);
+            var equipment = gameData.EntityGet<Equipment>(id);
             var attributes = attrService.Attributes(id);
-            var attackReady = game.EntityGet<AttackCooldown>(id) == null;
+            var attackReady = gameData.EntityGet<AttackCooldown>(id) == null;
 
             var lifeCurrent = health == null || double.IsNaN(health.LifeCurrent)
                 ? attributes.LifeMax

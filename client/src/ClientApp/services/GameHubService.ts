@@ -78,6 +78,11 @@ export class GameHubService implements IGameService
         await this.InvokeAsync("PickLoot", itemId);
     }
 
+    public async Respawn(): Promise<void>
+    {
+        await this.InvokeAsync("Respawn");
+    }
+
     private CreateHub(): HubConnection
     {
         const hubUrl = new URL("game", this.baseUrl.endsWith("/") ? this.baseUrl : `${this.baseUrl}/`).toString();

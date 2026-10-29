@@ -7,56 +7,59 @@ namespace BubleRpg.Server.Game.Systems;
 /// Держит цель, которую недавно атаковал каждый герой. Целью может быть
 /// как монстр, так и другой герой, поэтому система зовётся Enemy, а не Monster.
 /// </summary>
-public sealed class EnemyHudSystem(GameDataService store, GameStateService gameStateService) : IGameSystem
+public sealed class EnemyHudSystem(GameDbContext store) : IGameSystem
 {
     private const double HoldSeconds = 2;
 
     public void Update(double deltaTime)
     {
-        var gs = gameStateService.Current;
-
-        if (gs == null || gs.State == EGameState.INIT || gs.State == EGameState.OVER)
+        foreach (var gameId in store.GameIds())
         {
-            ClearTargets();
-            return;
-        }
+            var gs = store.Single<GameState>(gameId);
 
-        if (gs.State == EGameState.PAUSE) return;
-
-        foreach (var (heroId, _) in store.FindComponents<Hero>())
-        {
-            var hud = store.EntityGet<EnemyHudTarget>(heroId);
-            if (hud != null)
+            if (gs == null || gs.State == EGameState.INIT || gs.State == EGameState.OVER)
             {
-                hud.Remaining -= deltaTime;
-                if (hud.Remaining <= 0) store.EntityRemoveSet<EnemyHudTarget>(heroId);
+                ClearTargets(gameId);
+                continue;
             }
 
-            var target = FindHitTarget(heroId);
-            if (target == null) continue;
+            if (gs.State == EGameState.PAUSE) continue;
 
-            var current = store.EntityGet<EnemyHudTarget>(heroId);
-            if (current == null)
+            foreach (var (heroId, _) in store.FindComponents<Hero>(gameId))
             {
-                store.EntitySet(heroId, new EnemyHudTarget { TargetId = target.Value, Remaining = HoldSeconds });
-            }
-            else
-            {
-                current.TargetId = target.Value;
-                current.Remaining = HoldSeconds;
+                var hud = store.EntityGet<EnemyHudTarget>(heroId);
+                if (hud != null)
+                {
+                    hud.Remaining -= deltaTime;
+                    if (hud.Remaining <= 0) store.EntityRemoveSet<EnemyHudTarget>(heroId);
+                }
+
+                var target = FindHitTarget(gameId, heroId);
+                if (target == null) continue;
+
+                var current = store.EntityGet<EnemyHudTarget>(heroId);
+                if (current == null)
+                {
+                    store.EntitySet(heroId, new EnemyHudTarget { TargetId = target.Value, Remaining = HoldSeconds });
+                }
+                else
+                {
+                    current.TargetId = target.Value;
+                    current.Remaining = HoldSeconds;
+                }
             }
         }
     }
 
-    private void ClearTargets()
+    private void ClearTargets(int gameId)
     {
-        foreach (var entity in store.Query<EnemyHudTarget>())
+        foreach (var entity in store.Query<EnemyHudTarget>(gameId))
             store.EntityRemoveSet<EnemyHudTarget>(entity);
     }
 
-    private int? FindHitTarget(int heroId)
+    private int? FindHitTarget(int gameId, int heroId)
     {
-        foreach (var hitEntity in store.Query<AttackHit>())
+        foreach (var hitEntity in store.Query<AttackHit>(gameId))
         {
             var hit = store.EntityGet<AttackHit>(hitEntity);
             if (hit.Source != heroId) continue;

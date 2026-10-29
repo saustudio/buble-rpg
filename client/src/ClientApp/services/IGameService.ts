@@ -4,4 +4,5 @@ export interface IGameService
     ChooseLevelBonus(bonusId: string): void | Promise<void>;
     ChooseWaveBonus(bonusId: string): void | Promise<void>;
     PickLoot(itemId: string): void | Promise<void>;
+    Respawn(): void | Promise<void>;
 }

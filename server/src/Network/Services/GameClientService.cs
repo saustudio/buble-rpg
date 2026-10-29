@@ -16,7 +16,12 @@ public sealed class GameClientService(IHubContext<GameHub> hubContext)
 
     public void Add(string connectionId, string participantId) => connections[connectionId] = participantId;
 
-    public void Remove(string connectionId) => connections.TryRemove(connectionId, out _);
+    /// <summary>Убирает соединение и возвращает идентификатор участника, если он был.</summary>
+    public string? Remove(string connectionId)
+    {
+        connections.TryRemove(connectionId, out var participantId);
+        return participantId;
+    }
 
     public Task SendToConnectionAsync(string connectionId, GameStateResponse state, CancellationToken cancellationToken = default)
     {

@@ -3,11 +3,11 @@ using BubleRpg.Server.Application.Services;
 
 namespace BubleRpg.Server.Game.Services;
 
-public sealed class PhysicsService(GameDataService store)
+public sealed class PhysicsService(GameDbContext store)
 {
-    public void ResolveCollisions()
+    public void ResolveCollisions(int gameId)
     {
-        var entities = store.Query<Transform2D, Rigidbody>();
+        var entities = store.Query<Transform2D, Rigidbody>(gameId);
 
         for (var i = 0; i < entities.Count; i++)
         {

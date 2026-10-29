@@ -8,10 +8,37 @@ namespace BubleRpg.Server.Game.Services;
 /// </summary>
 public sealed class WaveService
 {
+    /// <summary>Пауза перед началом волны после её создания или сброса.</summary>
+    public const double PrepareSeconds = 2;
+
     private const double BaseMax = 6;
     private const int BaseMonsterLevel = 1;
     private const double BaseSpawnInterval = 2;
     private const double MinSpawnInterval = 0.3;
+
+    /// <summary>Пересчитывает итоговые параметры волны по её модификаторам.</summary>
+    public void Apply(Wave wave)
+    {
+        var stats = Stats(wave.Modifiers);
+        wave.SpawnMax = stats.MaxCount;
+        wave.SpawnLevel = stats.MonsterLevel;
+        wave.SpawnInterval = stats.SpawnInterval;
+        wave.EliteChance = stats.EliteChance;
+        wave.ItemQuantityMult = stats.ItemQuantityMult;
+        wave.ItemRarityBonus = stats.ItemRarityBonus;
+    }
+
+    /// <summary>Сброс волны к первой: прогресс, модификаторы и пауза подготовки.</summary>
+    public void Reset(Wave wave)
+    {
+        wave.Lvl = 1;
+        wave.Spawned = 0;
+        wave.SpawnTimer = 0;
+        wave.PrepareTimer = PrepareSeconds;
+        wave.Modifiers.Clear();
+        wave.Offers.Clear();
+        Apply(wave);
+    }
 
     public WaveStats Stats(IReadOnlyList<WaveModifier> modifiers)
     {

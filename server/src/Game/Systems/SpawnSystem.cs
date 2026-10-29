@@ -4,55 +4,60 @@ using BubleRpg.Server.Game.Services;
 namespace BubleRpg.Server.Game.Systems;
 
 public sealed class SpawnSystem(
-    GameDataService store,
-    GameStateService gameStateService,
+    GameDbContext store,
     EntityAttributesService attrService,
     WaveService waveService) : IGameSystem
 {
+    /// <summary>Сколько секунд новый герой остаётся духом.</summary>
+    private const double GhostSeconds = 5;
+
     public void Update(double deltaTime)
     {
-        ProcessHeroSpawnRequests();
-
-        var gs = gameStateService.Current;
-        if (gs == null || gs.State == EGameState.PAUSE || gs.State == EGameState.OVER) return;
-
-        if (gs.State == EGameState.INIT)
+        foreach (var gameId in store.GameIds())
         {
-            foreach (var entity in store.Query<Monster>()) store.EntityRemove(entity);
-            return;
+            ProcessHeroSpawnRequests(gameId);
+
+            var gs = store.Single<GameState>(gameId);
+            if (gs == null || gs.State == EGameState.PAUSE || gs.State == EGameState.OVER) continue;
+
+            if (gs.State == EGameState.INIT)
+            {
+                foreach (var entity in store.Query<Monster>(gameId)) store.EntityRemove(entity);
+                continue;
+            }
+
+            var deathList = store.Query<Monster, Health>(gameId)
+                .Where(entity => store.EntityGet<Health>(entity).LifeCurrent <= 0)
+                .ToList();
+
+            foreach (var entity in deathList) store.EntityRemove(entity);
+
+            var wave = store.Single<Wave>(gameId);
+            if (wave == null) continue;
+            if (wave.PrepareTimer > 0) continue;
+            if (wave.Spawned >= wave.SpawnMax) continue;
+
+            wave.SpawnTimer -= deltaTime;
+            if (wave.SpawnTimer > 0) continue;
+
+            SpawnMonster(gameId, wave);
+            wave.Spawned++;
+            wave.SpawnTimer = wave.SpawnInterval;
         }
-
-        var deathList = store.Query<Monster, Health>()
-            .Where(entity => store.EntityGet<Health>(entity).LifeCurrent <= 0)
-            .ToList();
-
-        foreach (var entity in deathList) store.EntityRemove(entity);
-
-        var wave = store.Single<Wave>();
-        if (wave == null) return;
-        if (wave.PrepareTimer > 0) return;
-        if (wave.Spawned >= wave.SpawnMax) return;
-
-        wave.SpawnTimer -= deltaTime;
-        if (wave.SpawnTimer > 0) return;
-
-        SpawnMonster(wave);
-        wave.Spawned++;
-        wave.SpawnTimer = wave.SpawnInterval;
     }
 
-    private void ProcessHeroSpawnRequests()
+    private void ProcessHeroSpawnRequests(int gameId)
     {
-        foreach (var (entityId, request) in store.FindComponents<HeroSpawnRequest>())
+        foreach (var (entityId, request) in store.FindComponents<HeroSpawnRequest>(gameId))
         {
             store.EntityRemove(entityId);
-            SpawnHero(request.Id);
+            SpawnHero(gameId, request.Id);
         }
     }
 
-    private int? FindHero(string id)
+    private int? FindHero(int gameId, string id)
     {
-        foreach (var (entityId, hero) in store.FindComponents<Hero>())
+        foreach (var (entityId, hero) in store.FindComponents<Hero>(gameId))
         {
             if (hero.Id == id) return entityId;
         }
@@ -68,10 +73,10 @@ public sealed class SpawnSystem(
         return health == null || double.IsNaN(health.LifeCurrent) || health.LifeCurrent > 0;
     }
 
-    private int SpawnHero(string id)
+    private int SpawnHero(int gameId, string id)
     {
         // Живого героя этого участника переиспользуем, мёртвого убираем и создаём нового.
-        var existing = FindHero(id);
+        var existing = FindHero(gameId, id);
         if (existing != null)
         {
             if (IsHeroAlive(existing.Value)) return existing.Value;
@@ -104,7 +109,7 @@ public sealed class SpawnSystem(
             AddHeroEquipment(equipment, ItemTag.BOOTS, baseStats);
         }
 
-        var hero = store.EntityCreate();
+        var hero = store.EntityCreate(gameId);
         store.EntitySet(hero, equipment);
         store.EntitySet(hero, baseStats);
         store.EntitySet(hero, new Hero { Id = id });
@@ -116,11 +121,13 @@ public sealed class SpawnSystem(
         store.EntitySet(hero, new Velocity());
         store.EntitySet(hero, new Rigidbody(25, 50));
         store.EntitySet(hero, new Transform2D(600, 400));
+        // Новый герой появляется духом: несколько секунд неуязвим и вне боя.
+        store.EntitySet(hero, new Ghost { Remaining = GhostSeconds });
 
         return hero;
     }
 
-    private void SpawnMonster(Wave wave)
+    private void SpawnMonster(int gameId, Wave wave)
     {
         var stats = waveService.Stats(wave.Modifiers);
         var level = wave.SpawnLevel;
@@ -156,7 +163,7 @@ public sealed class SpawnSystem(
         var size = archetype.Size + powerMult * 5;
         var mass = 50 * powerMult;
 
-        var monster = store.EntityCreate();
+        var monster = store.EntityCreate(gameId);
         store.EntitySet(monster, attributes);
         store.EntitySet(monster, SpawnPosition(size));
         store.EntitySet(monster, new Fraction(0));

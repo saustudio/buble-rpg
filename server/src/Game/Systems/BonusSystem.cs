@@ -6,8 +6,7 @@ using BubleRpg.Server.Game.Services;
 namespace BubleRpg.Server.Game.Systems;
 
 public sealed class BonusSystem(
-    GameDataService store,
-    GameStateService gameStateService,
+    GameDbContext store,
     ILogger<BonusSystem> logger) : IGameSystem
 {
     private const int OfferCount = 3;
@@ -17,14 +16,13 @@ public sealed class BonusSystem(
         // TODO(этап 3): офферы и применённые бонусы пока живут в одном List<IBonus>,
         // поэтому до разделения компонентов бонусные предложения не включаем.
         _ = deltaTime;
-        _ = gameStateService;
     }
 
-    private void ApplyChoices()
+    private void ApplyChoices(int gameId)
     {
-        foreach (var (entityId, choice) in store.FindComponents<BonusChoice>())
+        foreach (var (entityId, choice) in store.FindComponents<BonusChoice>(gameId))
         {
-            var picked = Choose(choice.BonusId);
+            var picked = Choose(gameId, choice.BonusId);
             if (picked == null)
             {
                 logger.LogWarning(
@@ -37,34 +35,34 @@ public sealed class BonusSystem(
         }
     }
 
-    private void RollLevelOffer()
+    private void RollLevelOffer(int gameId)
     {
-        if (HasOffer()) return;
+        if (HasOffer(gameId)) return;
 
-        var hero = store.First<Hero, Experience>();
+        var hero = store.First<Hero, Experience>(gameId);
         if (hero == null) return;
 
         var experience = store.EntityGet<Experience>(hero.Value);
         if (experience.Value < experience.Next) return;
 
-        RollOffers(hero.Value);
+        RollOffers(gameId, hero.Value);
     }
 
-    private void RollWaveOffer()
+    private void RollWaveOffer(int gameId)
     {
-        if (HasOffer()) return;
+        if (HasOffer(gameId)) return;
 
-        var waveEntity = store.First<Wave>();
+        var waveEntity = store.First<Wave>(gameId);
         if (waveEntity == null) return;
 
         var wave = store.EntityGet<Wave>(waveEntity.Value);
         if (wave.Spawned < wave.SpawnMax) return;
-        if (store.Query<Monster>().Count != 0) return;
+        if (store.Query<Monster>(gameId).Count != 0) return;
 
-        RollOffers(waveEntity.Value);
+        RollOffers(gameId, waveEntity.Value);
     }
 
-    private void RollOffers(int entity)
+    private void RollOffers(int gameId, int entity)
     {
         var available = new List<BonusNode>(Load("expbonus"));
         var result = new List<IBonus>();
@@ -76,25 +74,25 @@ public sealed class BonusSystem(
             result.Add(RollOffer(picked));
         }
 
-        RemoveOffer();
+        RemoveOffer(gameId);
         store.EntitySet(entity, result);
     }
 
-    private bool HasOffer()
+    private bool HasOffer(int gameId)
     {
-        var entity = store.FindEntity<List<IBonus>>();
+        var entity = store.FindEntity<List<IBonus>>(gameId);
         return entity != null && store.EntityGet<List<IBonus>>(entity.Value).Count > 0;
     }
 
-    private void RemoveOffer()
+    private void RemoveOffer(int gameId)
     {
-        var entity = store.FindEntity<List<IBonus>>();
+        var entity = store.FindEntity<List<IBonus>>(gameId);
         if (entity != null) store.EntityRemoveSet<List<IBonus>>(entity.Value);
     }
 
-    private IBonus? Choose(string bonusId)
+    private IBonus? Choose(int gameId, string bonusId)
     {
-        var entity = store.FindEntity<List<IBonus>>();
+        var entity = store.FindEntity<List<IBonus>>(gameId);
         if (entity == null) return null;
 
         var offer = store.EntityGet<List<IBonus>>(entity.Value);

@@ -23,6 +23,15 @@ public sealed class Hero
     public string Id { get; set; } = string.Empty;
 }
 
+/// <summary>
+/// Временная неуязвимость при появлении в мире: дух не атакует, не получает урон и не преследуется
+/// монстрами, но может перемещаться. <see cref="Remaining"/> — сколько секунд ещё действует.
+/// </summary>
+public sealed class Ghost
+{
+    public double Remaining { get; set; }
+}
+
 public sealed class Monster
 {
     public Monster(double power, int level, EMonsterRarity rarity)

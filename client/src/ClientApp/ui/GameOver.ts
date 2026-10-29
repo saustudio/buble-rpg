@@ -16,7 +16,13 @@ export class GameOverUI implements IGameStateView
 
     public Refresh(state: GameState): void
     {
-        if (state.Phase !== EGameState.OVER) return;
+        // После респавна фаза снова PLAY — окно закрывается, соединение остаётся.
+        if (state.Phase !== EGameState.OVER)
+        {
+            if (this.dialog.Visibled) this.dialog.Close();
+            return;
+        }
+
         if (this.dialog.Visibled) return;
 
         this.ShowStats(state);

@@ -35,4 +35,13 @@ public sealed class LootPickData : HeroActionData
 public sealed class HeroSpawnData : NetworkData
 {
     public string Id { get; init; } = string.Empty;
+
+    /// <summary>Необязательная игра, в которую хочет попасть участник (будущий явный выбор комнаты).</summary>
+    public int? GameId { get; init; }
+}
+
+/// <summary>Участник отключился; обрабатывается на игровом тике вместе с остальным вводом.</summary>
+public sealed class HeroDisconnectData : NetworkData
+{
+    public string Id { get; init; } = string.Empty;
 }

@@ -20,11 +20,15 @@ public sealed class GameHub(NetworkDataService data, GameClientService clients) 
 
     public override Task OnDisconnectedAsync(Exception? exception)
     {
-        clients.Remove(Context.ConnectionId);
+        var participantId = clients.Remove(Context.ConnectionId);
+        if (participantId != null) data.TryWrite(new HeroDisconnectData { Id = participantId });
         return base.OnDisconnectedAsync(exception);
     }
 
     public Task RequestState() => Task.CompletedTask;
+
+    // Респавн по тому же соединению: SpawnSystem удалит мёртвого героя и создаст нового.
+    public Task Respawn() => SaveData(new HeroSpawnData { Id = GuestId });
 
     public Task MoveTo(double x, double y) => SaveData(new MoveData
     {

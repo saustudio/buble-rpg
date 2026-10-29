@@ -4,7 +4,7 @@ using BubleRpg.Server.Application.Services;
 namespace BubleRpg.Server.Game.Services;
 
 public sealed class EntityAttributesService(
-    GameDataService store,
+    GameDbContext store,
     EntityModsService modsService)
 {
 
