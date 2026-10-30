@@ -4,7 +4,6 @@ import * as PIXI from "pixi.js";
 import { Graphics, IRenderer } from "../core/Core";
 import { EMonsterRarity, GameState, MonsterState } from "../model/GameState";
 import { GameStateRepository } from "../store/GameStateRepository";
-import { AttackRange } from "./AttackRange";
 
 /** Рендер монстров 1:1 из v1 `SpawnRenderer`. */
 export class MonsterRenderer implements IRenderer
@@ -89,24 +88,16 @@ export class MonsterRenderer implements IRenderer
         if (monster.Rarity === EMonsterRarity.RARE) outlineColor = 0x1E90FF;
         if (monster.Rarity === EMonsterRarity.ELITE) outlineColor = 0xffb703;
 
-        AttackRange.Render(
-            monster.X,
-            monster.Y,
-            monster.Size + monster.AttackRange,
-            monster.AttackReady,
-            monster.AttackType);
-
         this.RenderBody(monster.X, monster.Y, monster.Size, 0xD3D3D3, outlineColor);
         this.RenderEye(monster.X, monster.Y, monster.Size);
+        this.RenderHealth(monster.X, monster.Y, monster.Size, monster.LifeCurrent, monster.LifeMax);
+        this.RenderRange(monster.X, monster.Y, monster.AttackRange, monster.AttackReady);
 
         let stars = 0;
         if (monster.ItemCount >= 2) stars = 1;
         if (monster.ItemCount >= 4) stars = 2;
         if (monster.ItemCount >= 7) stars = 3;
-
         if (stars > 0) this.RenderStars(monster.X, monster.Y - monster.Size - 18, stars);
-
-        this.RenderHealth(monster.X, monster.Y, monster.Size, monster.LifeCurrent, monster.LifeMax);
     }
 
     private RenderBody(x: number, y: number, radius: number, fillColor: number, outlineColor: number): void
@@ -164,6 +155,34 @@ export class MonsterRenderer implements IRenderer
         Graphics.ShapeLayer.beginFill(0xe34f4f);
         Graphics.ShapeLayer.drawRect(x - barWidth / 2, barY, barWidth * hpPercent, 5);
         Graphics.ShapeLayer.endFill();
+    }
+
+    public RenderRange(x: number, y: number, radius: number, ready: boolean): void
+    {
+        const canvas = Graphics.ShapeLayer;
+        const drawColor = ready ? 0xb8a888 : 0xff4444;
+
+        const baseAlpha = 0.18;
+        const fillAlpha = baseAlpha * 0.4;
+        const lineAlpha = baseAlpha * 0.8;
+
+        canvas.lineStyle(1, drawColor, lineAlpha);
+        canvas.drawCircle(x, y, radius);
+
+        canvas.beginFill(drawColor, fillAlpha);
+        canvas.drawCircle(x, y, radius);
+        canvas.endFill();
+
+        const r = Math.min(255, Math.floor(((drawColor >> 16) & 0xff) * 1.6));
+        const g = Math.min(255, Math.floor(((drawColor >> 8) & 0xff) * 1.6));
+        const b = Math.min(255, Math.floor((drawColor & 0xff) * 1.6));
+        const halo = (r << 16) | (g << 8) | b;
+
+        canvas.lineStyle(1, halo, lineAlpha * 0.4);
+        canvas.drawCircle(x, y, radius + 4);
+
+        canvas.lineStyle(1, halo, lineAlpha * 0.2);
+        canvas.drawCircle(x, y, radius + 8);
     }
 }
 

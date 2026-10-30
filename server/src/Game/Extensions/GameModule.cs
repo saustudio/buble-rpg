@@ -1,3 +1,4 @@
+using BubleRpg.Server.Application.Services;
 using BubleRpg.Server.Game.Services;
 using BubleRpg.Server.Game.Systems;
 
@@ -27,7 +28,6 @@ public static class GameModule
         services.AddSingleton<IGameSystem, AttackSystem>();
         services.AddSingleton<IGameSystem, DefenceSystem>();
         services.AddSingleton<IGameSystem, DamageSystem>();
-        services.AddSingleton<IGameSystem, BattleEffectSystem>();
         services.AddSingleton<IGameSystem, StunSystem>();
         services.AddSingleton<IGameSystem, HealthSystem>();
         services.AddSingleton<IGameSystem, EnemyHudSystem>();
@@ -37,6 +37,7 @@ public static class GameModule
         services.AddSingleton<IGameSystem, GameStateSystem>();
 
         services.AddSingleton<GameService>();
+        services.AddSingleton<ITickHandler, GameTickHandler>();
 
         return services;
     }

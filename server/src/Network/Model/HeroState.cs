@@ -20,7 +20,6 @@ public sealed record HeroState(
     double Int,
     double AttackRange,
     bool AttackReady,
-    EAttackType AttackType,
     double EsMax,
     string? WeaponName,
     string? WeaponRarity,

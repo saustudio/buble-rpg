@@ -37,18 +37,20 @@ public sealed class DefenceSystem(
 
                     if (Random.Shared.NextDouble() > clampedChance)
                     {
+                        // Уклонение — событие одного тика; сам удар снимается с обработки.
                         var evasionEntity = store.EntityCreate(gameId);
                         store.EntitySet(evasionEntity, new DefenceEvasion(hit.Source, hit.Target));
-                        store.EntityRemove(evasionEntity);
+                        store.EntityRemove(entity);
                         continue;
                     }
                 }
 
                 if (Random.Shared.NextDouble() * 100 < targetAttributes.Block)
                 {
+                    // Блок — событие одного тика; сам удар снимается с обработки.
                     var blockEntity = store.EntityCreate(gameId);
                     store.EntitySet(blockEntity, new DefenceBlock(hit.Source, hit.Target));
-                    store.EntityRemove(blockEntity);
+                    store.EntityRemove(entity);
                     continue;
                 }
 

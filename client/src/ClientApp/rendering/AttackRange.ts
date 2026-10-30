@@ -1,23 +1,15 @@
 //#region renderer
 
 import { Graphics } from "../core/Core";
-import { EAttackType } from "../model/GameState";
 
 /** Круг дистанции поражения 1:1 из v1 `AttackRenderer.RenderRange`. */
 export class AttackRange
 {
-    private static readonly Color: Record<EAttackType, number> =
-    {
-        [EAttackType.PHYSICAL]: 0xb8a888,
-        [EAttackType.FIRE]: 0xff5533,
-        [EAttackType.COLD]: 0x55ddff,
-        [EAttackType.LIGHT]: 0xffee44,
-    };
 
-    public static Render(x: number, y: number, radius: number, ready: boolean, type: EAttackType): void
+    public static Render(x: number, y: number, radius: number, ready: boolean): void
     {
         const g = Graphics.ShapeLayer;
-        const drawColor = ready ? AttackRange.Color[type] : 0xff4444;
+        const drawColor = ready ? 0xb8a888 : 0xff4444;
 
         const baseAlpha = 0.18;
         const fillAlpha = baseAlpha * 0.4;

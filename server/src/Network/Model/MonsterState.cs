@@ -17,5 +17,4 @@ public sealed record MonsterState(
     EMonsterRarity Rarity,
     int ItemCount,
     double AttackRange,
-    bool AttackReady,
-    EAttackType AttackType);
+    bool AttackReady);

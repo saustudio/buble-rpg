@@ -54,3 +54,16 @@ export enum EBonusModifier
     PERCENT = "percent",
     PERCENT_POINT = "percentPoint",
 }
+
+export interface BonusEffect
+{
+    readonly Type: EBonusEffectType;
+    readonly Mod: EBonusModifier;
+    readonly Value: number;
+}
+
+export interface BonusOffer
+{
+    readonly Id: string;
+    readonly Effects: readonly BonusEffect[];
+}

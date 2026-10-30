@@ -1,4 +1,6 @@
-export interface HeroStats {
+/** View-модель характеристик героя для UI. */
+export interface HeroStats
+{
     PhysicalDamageMin: number;
     PhysicalDamageMax: number;
     FireDamageMin: number;

@@ -74,7 +74,7 @@ export class IndexPage
 
     private OnMouseLeave(): void
     {
-        const hero = this.repository.Last()?.Hero;
+        const hero = this.repository.Last()?.MyHero;
         if (!hero) return;
 
         // Остановка: цель там, где герой стоит сейчас.

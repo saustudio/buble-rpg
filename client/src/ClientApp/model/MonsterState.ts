@@ -1,5 +1,3 @@
-import { EAttackType } from "./AttackType";
-
 export enum EMonsterRarity
 {
     COMMON = "COMMON",
@@ -7,7 +5,9 @@ export enum EMonsterRarity
     ELITE = "ELITE",
 }
 
-export interface MonsterState {
+/** View-модель монстра для UI. */
+export interface MonsterState
+{
     Id: number;
     X: number;
     Y: number;
@@ -23,5 +23,4 @@ export interface MonsterState {
     ItemCount: number;
     AttackRange: number;
     AttackReady: boolean;
-    AttackType: EAttackType;
 }

@@ -23,7 +23,7 @@ public sealed class GameClientService(IHubContext<GameHub> hubContext)
         return participantId;
     }
 
-    public Task SendToConnectionAsync(string connectionId, GameStateResponse state, CancellationToken cancellationToken = default)
+    public Task SendToConnectionAsync(string connectionId, GameStateMessage state, CancellationToken cancellationToken = default)
     {
         return hubContext.Clients.Client(connectionId).SendAsync("GameState", state, cancellationToken);
     }

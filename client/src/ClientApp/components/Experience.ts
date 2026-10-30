@@ -18,7 +18,7 @@ export class ExperienceUI implements IGameStateView
 
     public Refresh(state: GameState): void
     {
-        const hero = state.Hero;
+        const hero = state.MyHero;
         if (!hero) return;
 
         this.xpText.textContent = `${Math.floor(hero.Experience)}/${hero.ExperienceNext}`;

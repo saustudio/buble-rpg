@@ -9,19 +9,19 @@ using Microsoft.AspNetCore.SignalR;
 namespace BubleRpg.Network.Hubs;
 
 [Authorize]
-public sealed class GameHub(NetworkDataService data, GameClientService clients) : Hub
+public sealed class GameHub(NetworkContext data, GameClientService clients) : Hub
 {
     public override Task OnConnectedAsync()
     {
         clients.Add(Context.ConnectionId, GuestId);
-        data.TryWrite(new HeroSpawnData { Id = GuestId });
+        data.Queue.Writer.TryWrite(new HeroSpawnData { Id = GuestId });
         return base.OnConnectedAsync();
     }
 
     public override Task OnDisconnectedAsync(Exception? exception)
     {
         var participantId = clients.Remove(Context.ConnectionId);
-        if (participantId != null) data.TryWrite(new HeroDisconnectData { Id = participantId });
+        if (participantId != null) data.Queue.Writer.TryWrite(new HeroDisconnectData { Id = participantId });
         return base.OnDisconnectedAsync(exception);
     }
 
@@ -57,7 +57,7 @@ public sealed class GameHub(NetworkDataService data, GameClientService clients) 
 
     private Task SaveData(NetworkData entry)
     {
-        data.TryWrite(entry);
+        data.Queue.Writer.TryWrite(entry);
         return Task.CompletedTask;
     }
 

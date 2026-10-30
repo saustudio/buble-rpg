@@ -101,7 +101,7 @@ export class StatsUI implements IGameStateView
 
         if (this.menuDialog.Visibled) return;
 
-        const hero = state.Hero;
+        const hero = state.MyHero;
         if (!hero) return;
 
         const stats = hero.Stats;

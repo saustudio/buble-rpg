@@ -2,6 +2,7 @@ using BubleRpg.Network.Hubs;
 using BubleRpg.Network.Model;
 using BubleRpg.Network.Security;
 using BubleRpg.Network.Services;
+using BubleRpg.Server.Application.Services;
 using BubleRpg.Server.Network.Services;
 
 using Microsoft.AspNetCore.Authentication;
@@ -16,9 +17,7 @@ public static class NetworkModule
         {
             options.DefaultAuthenticateScheme = GuestAuthenticationHandler.SchemeName;
             options.DefaultChallengeScheme = GuestAuthenticationHandler.SchemeName;
-        }).AddScheme<AuthenticationSchemeOptions, GuestAuthenticationHandler>(
-            GuestAuthenticationHandler.SchemeName,
-            _ => { });
+        }).AddScheme<AuthenticationSchemeOptions, GuestAuthenticationHandler>(GuestAuthenticationHandler.SchemeName, _ => { });
 
         services.AddAuthorization();
         services.AddSignalR().AddJsonProtocol(options =>
@@ -32,9 +31,10 @@ public static class NetworkModule
         services.AddHostedService<GuestSessionCleanupService>();
         services.AddSingleton<GameClientService>();
 
-        services.AddSingleton<NetworkDataService>();
-        services.AddSingleton<NetworkInputService>();
-        services.AddSingleton<NetworkOutputService>();
+        services.AddSingleton<NetworkContext>();
+        services.AddSingleton<GameStateMapper>();
+        services.AddSingleton<NetworkService>();
+        services.AddSingleton<ITickHandler, NetworkTickHandler>();
 
         return services;
     }

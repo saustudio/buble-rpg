@@ -2,7 +2,7 @@ import { HubConnection, HubConnectionBuilder, HubConnectionState, LogLevel } fro
 import { EventBus } from "../core/EventBus";
 import { GameEvents } from "../core/GameEvents";
 import { EGameState, GameState } from "../model/GameState";
-import { GameState as NetworkGameState } from "../model/network/GameState";
+import { GameStateMessage } from "../model/network/GameStateMessage";
 import { GuestAuthService } from "./GuestAuthService";
 import { IGameService } from "./IGameService";
 import { GameSessionRepository } from "../store/GameSessionRepository";
@@ -51,10 +51,10 @@ export class GameHubService implements IGameService
     {
         const state = this.repository.Last();
         if (state?.Phase !== EGameState.PLAY) return;
-        if (!state.Hero) return;
+        if (!state.MyHero) return;
 
         // Цель совпадает с позицией героя — это остановка, её нельзя терять в троттлинге.
-        const isStop = state.Hero.X === x && state.Hero.Y === y;
+        const isStop = state.MyHero.X === x && state.MyHero.Y === y;
 
         const now = performance.now();
         if (!isStop && now - this.lastMoveSentAt < GameHubService.MoveInterval) return;
@@ -113,17 +113,18 @@ export class GameHubService implements IGameService
         await this.hub.invoke("RequestState");
     }
 
-    private OnGameState(state: NetworkGameState): void
+    private OnGameState(state: GameStateMessage): void
     {
-        const gameState = this.ToModel(state, performance.now());
+        const gameState = this.ToViewFromDto(state, performance.now());
         this.repository.Create(gameState);
         this.events.Publish(GameEvents.StateChanged, gameState);
     }
 
-    private ToModel(state: NetworkGameState, createdAt: number): GameState
+    /** Сетевой снимок → View-модель: добавляет клиентские поля, которых нет в проводе. */
+    private ToViewFromDto(snapshot: GameStateMessage, createdAt: number): GameState
     {
         return {
-            ...state,
+            ...snapshot,
             ExperienceBonusOffer: [],
             WaveBonusOffer: [],
             CreatedAt: createdAt,

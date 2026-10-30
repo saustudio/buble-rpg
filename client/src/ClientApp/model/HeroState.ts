@@ -1,7 +1,8 @@
-import { EAttackType } from "./AttackType";
 import { HeroStats } from "./HeroStats";
 
-export interface HeroState {
+/** View-модель героя для UI. */
+export interface HeroState
+{
     Id: number;
     X: number;
     Y: number;
@@ -19,7 +20,6 @@ export interface HeroState {
     Int: number;
     AttackRange: number;
     AttackReady: boolean;
-    AttackType: EAttackType;
     EsMax: number;
     WeaponName: string | null;
     WeaponRarity: string | null;

@@ -1,6 +1,4 @@
-using BubleRpg.Server.Application.Services;
 using BubleRpg.Server.Game.Model;
-using BubleRpg.Server.Game.Systems;
 
 using GameModel = BubleRpg.Server.Game.Model.Game;
 
@@ -12,20 +10,8 @@ namespace BubleRpg.Server.Game.Services;
 /// уничтожается. Данные (сущности, компоненты, состав) — в контексте, решений он не принимает.
 /// Завершённая игра помечается <see cref="EGameState.OVER"/> и пропускается системами.
 /// </summary>
-public sealed class GameService(
-    IEnumerable<IGameSystem> systems,
-    GameDbContext context) : IApplicationService
+public sealed class GameService(GameDbContext context)
 {
-    private readonly IGameSystem[] ordered = systems.ToArray();
-
-    public void Run(double deltaSeconds)
-    {
-        // Системы сами обходят список игр и берут связанные данные по gameId.
-        foreach (var system in ordered) system.Update(deltaSeconds);
-
-        FinishGames();
-    }
-
     /// <summary>Игра, к которой относится участник, либо <c>null</c>, если он ещё не подключён.</summary>
     public int? GameOf(string participantId)
     {
@@ -68,6 +54,56 @@ public sealed class GameService(
         LeaveGame(gameId.Value, participantId);
     }
 
+    /// <summary>Ставит заявку на спавн героя участника: игру выбирают правила жизненного цикла.</summary>
+    public void RequestSpawn(string participantId, int? preferredGameId = null)
+    {
+        var gameId = ResolveSpawnGame(participantId, preferredGameId);
+
+        var entity = context.EntityCreate(gameId);
+        context.EntitySet(entity, new HeroSpawnRequest { Id = participantId });
+    }
+
+    /// <summary>Применяет цель движения участника к его герою.</summary>
+    public void MoveTo(string participantId, double x, double y)
+    {
+        if (!double.IsFinite(x) || !double.IsFinite(y)) return;
+
+        var heroId = HeroOf(participantId);
+        if (heroId == null) return;
+
+        var target = context.EntityGet<MoveTarget>(heroId.Value);
+        if (target == null)
+        {
+            context.EntitySet(heroId.Value, new MoveTarget { X = x, Y = y });
+            return;
+        }
+
+        target.X = x;
+        target.Y = y;
+    }
+
+    /// <summary>Выбор бонуса уровня.</summary>
+    public void ChooseLevelBonus(string participantId, string bonusId) => ChooseBonus(participantId, bonusId, EBonusSource.Level);
+
+    /// <summary>Выбор бонуса волны.</summary>
+    public void ChooseWaveBonus(string participantId, string bonusId) => ChooseBonus(participantId, bonusId, EBonusSource.Wave);
+
+    /// <summary>Выбор предмета из добычи.</summary>
+    public void PickLoot(string participantId, string itemId)
+    {
+        var heroId = HeroOf(participantId);
+        if (heroId == null) return;
+
+        var pick = context.EntityGet<LootPick>(heroId.Value);
+        if (pick == null)
+        {
+            context.EntitySet(heroId.Value, new LootPick { ItemId = itemId });
+            return;
+        }
+
+        pick.ItemId = itemId;
+    }
+
     /// <summary>Список игр для будущего выбора комнаты игроком.</summary>
     public IReadOnlyList<GameInfo> ListGames()
     {
@@ -105,7 +141,7 @@ public sealed class GameService(
     }
 
     /// <summary>Помечает завершённые игры: в них нет живых героев и никто не ждёт спавна.</summary>
-    private void FinishGames()
+    public void FinishGames()
     {
         foreach (var gameId in context.GameIds())
         {
@@ -166,6 +202,31 @@ public sealed class GameService(
 
         var game = context.Single<GameModel>(gameId);
         if (game == null || game.Participants.Count == 0) context.RemoveGame(gameId);
+    }
+
+    /// <summary>Сущность героя участника в его текущей игре, либо <c>null</c>.</summary>
+    private int? HeroOf(string participantId)
+    {
+        var gameId = GameOf(participantId);
+        if (gameId == null) return null;
+
+        return FindHeroEntity(gameId.Value, participantId);
+    }
+
+    private void ChooseBonus(string participantId, string bonusId, EBonusSource source)
+    {
+        var heroId = HeroOf(participantId);
+        if (heroId == null) return;
+
+        var choice = context.EntityGet<BonusChoice>(heroId.Value);
+        if (choice == null)
+        {
+            context.EntitySet(heroId.Value, new BonusChoice { BonusId = bonusId, Source = source });
+            return;
+        }
+
+        choice.BonusId = bonusId;
+        choice.Source = source;
     }
 
     private int? FindHeroEntity(int gameId, string participantId)

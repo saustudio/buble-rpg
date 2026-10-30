@@ -29,7 +29,7 @@ export class HeroRenderer implements IRenderer
         if (!state) return;
 
         // Свой мёртвый герой не рисуется (герой остаётся в мире до респавна).
-        if (state.Hero && state.Hero.LifeCurrent > 0) this.RenderOwnHero(state.Hero);
+        if (state.MyHero && state.MyHero.LifeCurrent > 0) this.RenderOwnHero(state.MyHero);
 
         for (const hero of state.EnemyHeroes) this.RenderEnemyHero(hero);
     }
@@ -39,49 +39,55 @@ export class HeroRenderer implements IRenderer
         // Дух вне боя: без прицела и круга атаки, полупрозрачный.
         const alpha = hero.IsGhost ? 0.4 : 1;
 
-        if (!hero.IsGhost)
-        {
-            this.RenderTarget(hero);
-
-            AttackRange.Render(
-                hero.X,
-                hero.Y,
-                hero.Size + hero.AttackRange,
-                hero.AttackReady,
-                hero.AttackType);
-        }
-
+        this.RenderTarget(hero);
         this.RenderBody(hero.X, hero.Y, hero.Size, 0x4a7fc7, 0x151d2b, alpha);
         this.RenderEye(hero.X, hero.Y, hero.Size, Math.atan2(hero.DirY, hero.DirX), alpha);
         this.RenderHealth(hero);
+        this.RenderRange(hero.X, hero.Y, hero.Size + hero.AttackRange, hero.AttackReady);
     }
 
     private RenderEnemyHero(hero: HeroState): void
     {
         const alpha = hero.IsGhost ? 0.4 : 1;
 
-        if (!hero.IsGhost)
-        {
-            AttackRange.Render(
-                hero.X,
-                hero.Y,
-                hero.Size + hero.AttackRange,
-                hero.AttackReady,
-                hero.AttackType);
-        }
+        let outlineColor = 0x151d2b;
+        if (hero.WeaponRarity === "magic") outlineColor = 0x1E90FF;
+        if (hero.WeaponRarity === "rare") outlineColor = 0xffb703;
 
-        this.RenderBody(hero.X, hero.Y, hero.Size, 0xc77f4a, HeroRenderer.OutlineColor(hero.WeaponRarity), alpha);
+        this.RenderBody(hero.X, hero.Y, hero.Size, 0xc77f4a, outlineColor, alpha);
         this.RenderEye(hero.X, hero.Y, hero.Size, Math.atan2(hero.DirY, hero.DirX), alpha);
         this.RenderHealth(hero);
+        this.RenderRange(hero.X, hero.Y, hero.Size + hero.AttackRange, hero.AttackReady);
     }
 
-    /** Цвет обводки чужого героя — по редкости его оружия. */
-    private static OutlineColor(rarity: string | null): number
+    public RenderRange(x: number, y: number, radius: number, ready: boolean): void
     {
-        if (rarity === "magic") return 0x1E90FF;
-        if (rarity === "rare") return 0xffb703;
-        return 0x151d2b;
+        const canvas = Graphics.ShapeLayer;
+        const drawColor = ready ? 0xb8a888 : 0xff4444;
+
+        const baseAlpha = 0.18;
+        const fillAlpha = baseAlpha * 0.4;
+        const lineAlpha = baseAlpha * 0.8;
+
+        canvas.lineStyle(1, drawColor, lineAlpha);
+        canvas.drawCircle(x, y, radius);
+
+        canvas.beginFill(drawColor, fillAlpha);
+        canvas.drawCircle(x, y, radius);
+        canvas.endFill();
+
+        const r = Math.min(255, Math.floor(((drawColor >> 16) & 0xff) * 1.6));
+        const g = Math.min(255, Math.floor(((drawColor >> 8) & 0xff) * 1.6));
+        const b = Math.min(255, Math.floor((drawColor & 0xff) * 1.6));
+        const halo =  (r << 16) | (g << 8) | b;
+
+        canvas.lineStyle(1, halo, lineAlpha * 0.4);
+        canvas.drawCircle(x, y, radius + 4);
+
+        canvas.lineStyle(1, halo, lineAlpha * 0.2);
+        canvas.drawCircle(x, y, radius + 8);
     }
+
 
     private QueryRenderState(): GameState | null
     {
@@ -115,7 +121,7 @@ export class HeroRenderer implements IRenderer
     {
         return {
             ...next,
-            Hero: this.InterpolateHero(previous.Hero, next.Hero, t),
+            MyHero: this.InterpolateHero(previous.MyHero, next.MyHero, t),
             EnemyHeroes: this.InterpolateHeroes(previous, next, t),
         };
     }
