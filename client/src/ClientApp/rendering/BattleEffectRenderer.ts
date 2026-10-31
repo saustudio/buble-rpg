@@ -3,7 +3,7 @@
 import * as PIXI from "pixi.js";
 import { AttackHit } from "../model/Combat";
 import { Graphics, IRenderer } from "../core/Core";
-import { GameState } from "../model/GameState";
+import { GameState, Unit } from "../model/GameState";
 import { GameStateRepository } from "../store/GameStateRepository";
 
 /** Всплывающий текст боя: урон, MISS, BLOCK. Длительность, позиция и анимация — целиком клиентские. */
@@ -100,9 +100,15 @@ export class BattleEffectRenderer implements IRenderer
         this.previousTargets = this.targets;
         this.targets = new Map();
 
-        if (state.MyHero) this.Remember(state.MyHero.Id, state.MyHero);
-        for (const hero of state.EnemyHeroes) this.Remember(hero.Id, hero);
-        for (const monster of state.Monsters) this.Remember(monster.Id, monster);
+        if (state.MyHero) this.RememberUnit(state.MyHero);
+        for (const hero of state.EnemyHeroes) this.RememberUnit(hero);
+        for (const monster of state.Monsters) this.RememberUnit(monster);
+    }
+
+    /** Юнит составной — сводим его к точке всплытия эффекта. */
+    private RememberUnit(unit: Unit): void
+    {
+        this.Remember(unit.Id, { X: unit.Location.X, Y: unit.Location.Y, Size: unit.Attributes.Size });
     }
 
     private Remember(id: number, target: TargetPoint): void

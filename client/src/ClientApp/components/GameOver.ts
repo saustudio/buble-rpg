@@ -32,7 +32,7 @@ export class GameOverUI implements IGameStateView
     private ShowStats(state: GameState): void
     {
         this.dialog.Container.querySelector("#gameOverWave")!.textContent = String(state.Wave?.Lvl ?? 0);
-        this.dialog.Container.querySelector("#gameOverLevel")!.textContent = String(state.MyHero?.Level ?? 0);
+        this.dialog.Container.querySelector("#gameOverLevel")!.textContent = String(state.MyHero?.Progress.Level ?? 0);
     }
 }
 

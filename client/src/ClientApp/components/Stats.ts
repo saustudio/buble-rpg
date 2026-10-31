@@ -3,6 +3,7 @@
 import { IGameStateView } from "../core/Core";
 import { UIDialog } from "./Dialog";
 import { GameState } from "../model/GameState";
+import { UnitService } from "../services/UnitService";
 
 export class StatsUI implements IGameStateView
 {
@@ -104,44 +105,46 @@ export class StatsUI implements IGameStateView
         const hero = state.MyHero;
         if (!hero) return;
 
-        const stats = hero.Stats;
+        const { Offence, Defence, Vitals, Attributes } = hero;
 
-        this.hp.textContent = `${hero.LifeCurrent.toFixed()}/${hero.LifeMax.toFixed()}`;
-        this.es.textContent = `${hero.EsCurrent.toFixed()}/${hero.EsMax.toFixed()}`;
+        this.hp.textContent = `${Vitals.LifeCurrent.toFixed()}/${Vitals.LifeMax.toFixed()}`;
+        this.es.textContent = `${Vitals.EsCurrent.toFixed()}/${Vitals.EsMax.toFixed()}`;
 
-        this.regen.textContent = stats.LifePerSecond.toFixed(2);
-        this.lifePerKill.textContent = stats.LifePerKill.toFixed();
-        this.speed.textContent = stats.MovementSpeed.toFixed();
+        this.regen.textContent = Vitals.LifePerSecond.toFixed(2);
+        this.lifePerKill.textContent = Vitals.LifePerKill.toFixed();
+        this.speed.textContent = Attributes.MovementSpeed.toFixed();
 
-        this.str.textContent = hero.Str.toFixed();
-        this.dex.textContent = hero.Dex.toFixed();
-        this.int.textContent = hero.Int.toFixed();
+        this.str.textContent = Attributes.Str.toFixed();
+        this.dex.textContent = Attributes.Dex.toFixed();
+        this.int.textContent = Attributes.Int.toFixed();
 
-        this.armor.textContent = stats.Armour.toFixed();
-        this.physReduction.textContent = stats.PhysReduction.toFixed() + '%';
-        this.evasion.textContent = stats.Evasion.toFixed();
-        this.block.textContent = stats.Block.toFixed() + '%';
-        this.reflect.textContent = stats.PhysReflect.toFixed();
-        this.stunReduction.textContent = stats.StunReduction.toFixed() + '%';
+        this.armor.textContent = Defence.Armour.toFixed();
+        this.physReduction.textContent = Defence.PhysReduction.toFixed() + '%';
+        this.evasion.textContent = Defence.Evasion.toFixed();
+        this.block.textContent = Defence.Block.toFixed() + '%';
+        this.reflect.textContent = Defence.PhysReflect.toFixed();
+        this.stunReduction.textContent = Defence.StunReduction.toFixed() + '%';
 
-        this.fireRes.textContent = stats.FireResist.toFixed() + '%';
-        this.coldRes.textContent = stats.ColdResist.toFixed() + '%';
-        this.lightRes.textContent = stats.LightResist.toFixed() + '%';
+        this.fireRes.textContent = Defence.FireResist.toFixed() + '%';
+        this.coldRes.textContent = Defence.ColdResist.toFixed() + '%';
+        this.lightRes.textContent = Defence.LightResist.toFixed() + '%';
 
-        this.physDmg.textContent = `${stats.PhysicalDamageMin.toFixed()}-${stats.PhysicalDamageMax.toFixed()}`;
-        this.fireDmg.textContent = `${stats.FireDamageMin.toFixed()}-${stats.FireDamageMax.toFixed()}`;
-        this.coldDmg.textContent = `${stats.ColdDamageMin.toFixed()}-${stats.ColdDamageMax.toFixed()}`;
-        this.lightDmg.textContent = `${stats.LightDamageMin.toFixed()}-${stats.LightDamageMax.toFixed()}`;
+        this.physDmg.textContent = `${Offence.PhysicalDamageMin.toFixed()}-${Offence.PhysicalDamageMax.toFixed()}`;
+        this.fireDmg.textContent = `${Offence.FireDamageMin.toFixed()}-${Offence.FireDamageMax.toFixed()}`;
+        this.coldDmg.textContent = `${Offence.ColdDamageMin.toFixed()}-${Offence.ColdDamageMax.toFixed()}`;
+        this.lightDmg.textContent = `${Offence.LightDamageMin.toFixed()}-${Offence.LightDamageMax.toFixed()}`;
 
-        this.attackSpeed.textContent = stats.AttackSpeed.toFixed(2);
-        this.attackRange.textContent = hero.AttackRange.toFixed();
-        this.accuracy.textContent = stats.Accuracy.toFixed();
-        this.critChance.textContent = stats.CriticalChance.toFixed() + '%';
-        this.critMult.textContent = stats.CriticalMultiplier.toFixed(2) + 'x';
-        this.stunInc.textContent = stats.Stun.toFixed() + '%';
+        this.attackSpeed.textContent = Offence.AttackSpeed.toFixed(2);
+        this.attackRange.textContent = hero.Attack.Range.toFixed();
+        this.accuracy.textContent = Offence.Accuracy.toFixed();
+        this.critChance.textContent = Offence.CriticalChance.toFixed() + '%';
+        this.critMult.textContent = Offence.CriticalMultiplier.toFixed(2) + 'x';
+        this.stunInc.textContent = Offence.Stun.toFixed() + '%';
 
-        this.weaponName.textContent = hero.WeaponName ?? "Без оружия";
-        this.weaponName.className = `stat-value rarity-${hero.WeaponRarity ?? "common"}`;
+        // Детальное оружие придёт отдельным осмотром; здесь — только имя и редкость.
+        const weapon = UnitService.ItemInSlot(hero, "weapon");
+        this.weaponName.textContent = weapon?.Name ?? "Без оружия";
+        this.weaponName.className = `stat-value rarity-${weapon?.Rarity ?? "common"}`;
 
         this.menuDialog.Open();
         this.wasOpen = true;

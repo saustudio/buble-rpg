@@ -1,15 +1,12 @@
 import { BonusOffer } from "./Bonus";
 import { AttackHit, DefenceBlock, DefenceEvasion } from "./Combat";
-import { HeroState } from "./HeroState";
-import { MonsterState } from "./MonsterState";
+import { Unit } from "./Unit";
 import { WaveState } from "./WaveState";
 
 // View-модель собирает собственные типы (не сетевые), чтобы UI не зависел от network-слоя.
 export * from "./Bonus";
 export * from "./Combat";
-export * from "./HeroState";
-export * from "./HeroStats";
-export * from "./MonsterState";
+export * from "./Unit";
 export * from "./WaveState";
 
 export enum EGameState
@@ -30,10 +27,10 @@ export interface GameState
     Height: number;
     Phase: EGameState;
     /** Герой этого соединения; null, пока игровая логика его не создала. */
-    MyHero: HeroState | null;
+    MyHero: Unit | null;
     /** Герои других участников. */
-    EnemyHeroes: HeroState[];
-    Monsters: MonsterState[];
+    EnemyHeroes: Unit[];
+    Monsters: Unit[];
     Wave: WaveState | null;
     /** Кого атакует мой герой: id монстра или другого героя. */
     EnemyTarget: number | null;

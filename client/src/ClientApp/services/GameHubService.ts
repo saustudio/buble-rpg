@@ -54,7 +54,7 @@ export class GameHubService implements IGameService
         if (!state.MyHero) return;
 
         // Цель совпадает с позицией героя — это остановка, её нельзя терять в троттлинге.
-        const isStop = state.MyHero.X === x && state.MyHero.Y === y;
+        const isStop = state.MyHero.Location.X === x && state.MyHero.Location.Y === y;
 
         const now = performance.now();
         if (!isStop && now - this.lastMoveSentAt < GameHubService.MoveInterval) return;

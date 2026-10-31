@@ -1,21 +1,8 @@
 //#region UI
 
 import { IGameStateView } from "../core/Core";
-import { EGameState, EMonsterRarity, GameState, HeroState, MonsterState } from "../model/GameState";
-
-const RarityTitle: Record<EMonsterRarity, string> =
-{
-    [EMonsterRarity.COMMON]: "Обычный",
-    [EMonsterRarity.RARE]: "Редкий",
-    [EMonsterRarity.ELITE]: "Элитный",
-};
-
-const RarityClass: Record<EMonsterRarity, string> =
-{
-    [EMonsterRarity.COMMON]: "common",
-    [EMonsterRarity.RARE]: "rare",
-    [EMonsterRarity.ELITE]: "elite",
-};
+import { EGameState, GameState, Unit } from "../model/GameState";
+import { UnitService } from "../services/UnitService";
 
 /** Панель цели под атакой: и монстр, и чужой герой. */
 export class EnemyHudUI implements IGameStateView
@@ -47,38 +34,52 @@ export class EnemyHudUI implements IGameStateView
             return;
         }
 
+        // Роль цели задаёт список, в котором она пришла: сначала монстры, затем чужие герои.
         const monster = state.Monsters.find(monster => monster.Id === targetId);
         if (monster)
         {
-            this.ShowMonster(monster);
+            this.Show(monster, false);
             return;
         }
 
         const hero = state.EnemyHeroes.find(hero => hero.Id === targetId);
         if (hero)
         {
-            this.ShowHero(hero);
+            this.Show(hero, true);
             return;
         }
 
         this.Hide();
     }
 
-    private ShowMonster(target: MonsterState): void
+    /**
+     * Подпись зависит от роли: у героя — оружие, у монстра — клиентская оценка
+     * «крутизны» по экипировке. Сервер редкость монстра не присылает.
+     */
+    private Show(target: Unit, isHero: boolean): void
     {
-        this.ShowBars(target.LifeCurrent, target.LifeMax, target.EsCurrent, target.EsMax);
-        this.rarity.textContent = RarityTitle[target.Rarity];
-        this.rarity.className = `enemy-rarity ${RarityClass[target.Rarity]}`;
-        this.level.textContent = `Ур. ${target.Level}`;
-        this.panel.classList.add("show");
-    }
+        this.ShowBars(target.Vitals.LifeCurrent, target.Vitals.LifeMax, target.Vitals.EsCurrent, target.Vitals.EsMax);
 
-    private ShowHero(target: HeroState): void
-    {
-        this.ShowBars(target.LifeCurrent, target.LifeMax, target.EsCurrent, target.EsMax);
-        this.rarity.textContent = target.WeaponName ?? "Герой";
-        this.rarity.className = `enemy-rarity ${EnemyHudUI.HeroRarityClass(target.WeaponRarity)}`;
-        this.level.textContent = `Ур. ${target.Level}`;
+        const weapon = isHero ? UnitService.ItemInSlot(target, "weapon") : null;
+
+        if (weapon)
+        {
+            this.rarity.textContent = weapon.Name;
+            this.rarity.className = `enemy-rarity ${EnemyHudUI.RarityClass(weapon.Rarity)}`;
+        }
+        else if (isHero)
+        {
+            this.rarity.textContent = "Герой";
+            this.rarity.className = "enemy-rarity common";
+        }
+        else
+        {
+            const rarity = UnitService.MaxRarity(target);
+            this.rarity.textContent = EnemyHudUI.RarityTitle(rarity);
+            this.rarity.className = `enemy-rarity ${EnemyHudUI.RarityClass(rarity)}`;
+        }
+
+        this.level.textContent = `Ур. ${target.Progress.Level}`;
         this.panel.classList.add("show");
     }
 
@@ -94,7 +95,14 @@ export class EnemyHudUI implements IGameStateView
         this.panel.classList.remove("show");
     }
 
-    private static HeroRarityClass(rarity: string | null): string
+    private static RarityTitle(rarity: string): string
+    {
+        if (rarity === "rare") return "Редкий";
+        if (rarity === "magic") return "Необычный";
+        return "Обычный";
+    }
+
+    private static RarityClass(rarity: string): string
     {
         if (rarity === "rare") return "elite";
         if (rarity === "magic") return "rare";

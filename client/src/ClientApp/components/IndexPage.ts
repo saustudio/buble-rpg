@@ -78,7 +78,7 @@ export class IndexPage
         if (!hero) return;
 
         // Остановка: цель там, где герой стоит сейчас.
-        void this.gameService.MoveTo(hero.X, hero.Y);
+        void this.gameService.MoveTo(hero.Location.X, hero.Location.Y);
     }
 
     private OnGameStateChanged(state: GameState): void

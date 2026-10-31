@@ -21,9 +21,11 @@ export class ExperienceUI implements IGameStateView
         const hero = state.MyHero;
         if (!hero) return;
 
-        this.xpText.textContent = `${Math.floor(hero.Experience)}/${hero.ExperienceNext}`;
-        this.statLevel.textContent = String(hero.Level);
-        this.xpBarFill.style.width = `${hero.ExperienceNext > 0 ? (hero.Experience / hero.ExperienceNext) * 100 : 0}%`;
+        const progress = hero.Progress;
+
+        this.xpText.textContent = `${Math.floor(progress.Experience)}/${progress.ExperienceNext}`;
+        this.statLevel.textContent = String(progress.Level);
+        this.xpBarFill.style.width = `${progress.ExperienceNext > 0 ? (progress.Experience / progress.ExperienceNext) * 100 : 0}%`;
     }
 }
 

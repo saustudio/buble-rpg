@@ -397,7 +397,7 @@
 | `ViewService` | Конвертация Model → View | `LootItemViewService` |
 | `View` | Интерфейс снимка для рендера | `LootItemView` |
 | `State` | Корневой View-тип диалога; сетевая модель состояния | `LootDialogState`, `GameState` |
-| — (без суффикса) | Сетевой контракт | `GameState`, `HeroState` |
+| — (без суффикса) | Сетевой контракт | `GameState`, `Unit` |
 | `Message` | Сетевое сообщение верхнего уровня | `LootDialogMessage` |
 | `Dialog` | UI-диалог | `LootDialog` |
 | `Component` | ECS-компонент | `HealthComponent` |
@@ -415,7 +415,7 @@ domain-моделью, не создавать вторую сущность —
 `GameService`.
 
 Data-интерфейсы (View и сетевые контракты) префикс `I` не получают:
-`GameView`, `HeroState`, `BonusCardView`.
+`GameView`, `Unit`, `BonusCardView`.
 
 ### 5.2. Запрещённые суффиксы
 

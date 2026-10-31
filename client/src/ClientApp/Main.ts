@@ -2,8 +2,7 @@ import { EventBus } from "./core/EventBus";
 import { Graphics, Input } from "./core/Core";
 import { GameHubService } from "./services/GameHubService";
 import { BattleEffectRenderer } from "./rendering/BattleEffectRenderer";
-import { HeroRenderer } from "./rendering/HeroRenderer";
-import { MonsterRenderer } from "./rendering/MonsterRenderer";
+import { UnitRenderer } from "./rendering/UnitRenderer";
 import { GameStateRepository } from "./store/GameStateRepository";
 import { IndexPage } from "./components/IndexPage";
 
@@ -37,8 +36,7 @@ export class Main
             canvasContainer.style.aspectRatio = `${Graphics.Width} / ${Graphics.Height}`;
         }
 
-        Graphics.RendererAdd(new MonsterRenderer(this.repository));
-        Graphics.RendererAdd(new HeroRenderer(this.repository));
+        Graphics.RendererAdd(new UnitRenderer(this.repository));
         Graphics.RendererAdd(new BattleEffectRenderer(this.repository));
         Graphics.Start();
 

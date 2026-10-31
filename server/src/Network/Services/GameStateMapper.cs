@@ -15,30 +15,36 @@ public sealed class GameStateMapper(
     /// <summary>Собирает персональный снимок игры для конкретного участника.</summary>
     public GameStateMessage Map(int gameId, string participantId)
     {
-        HeroState? myHero = null;
-        var enemyHeroes = new List<HeroState>();
+        Unit? myHero = null;
+        var enemyHeroes = new List<Unit>();
+        var monsters = new List<Unit>();
         int? enemyTarget = null;
 
-        foreach (var (entityId, hero) in game.FindComponents<Hero>(gameId))
+        foreach (var (entityId, hero) in game.FindComponents<BubleRpg.Server.Game.Model.Hero>(gameId))
         {
-            var state = MapHero(entityId);
+            var unit = MapUnit(entityId);
 
             if (hero.Id == participantId)
             {
                 // Свой герой отдаётся владельцу даже мёртвым (нужен уровень для окна «ПОРАЖЕНИЕ»).
-                myHero = state;
+                myHero = unit;
                 enemyTarget = game.EntityGet<EnemyHudTarget>(entityId)?.TargetId;
             }
-            else if (state.LifeCurrent > 0)
+            else if (unit.Vitals.LifeCurrent > 0)
             {
                 // Мёртвые чужие герои не отдаются — их никто не рисует.
-                enemyHeroes.Add(state);
+                enemyHeroes.Add(unit);
             }
+        }
+
+        foreach (var entityId in game.Query<Monster, Transform2D, Rigidbody, Health, EntityAttributes>(gameId))
+        {
+            monsters.Add(MapUnit(entityId));
         }
 
         // Фаза мира общая, но конкретному соединению смерть его героя отдаётся как OVER.
         var phase = game.Single<GameState>(gameId)?.State ?? EGameState.INIT;
-        if (myHero != null && myHero.LifeCurrent <= 0) phase = EGameState.OVER;
+        if (myHero != null && myHero.Vitals.LifeCurrent <= 0) phase = EGameState.OVER;
 
         return new GameStateMessage(
             Arena.Width,
@@ -46,7 +52,7 @@ public sealed class GameStateMapper(
             phase,
             myHero,
             enemyHeroes,
-            MapMonsters(gameId),
+            monsters,
             MapWave(gameId),
             enemyTarget,
             Collect<AttackHit>(gameId),
@@ -68,18 +74,43 @@ public sealed class GameStateMapper(
         return result;
     }
 
-    private HeroState MapHero(int id)
+    /// <summary>
+    /// Собирает юнита из компонентов. Герой и монстр отличаются только тем, какие компоненты
+    /// заполнены: опыт есть у героя, уровень монстра задан волной, остальное общее.
+    /// </summary>
+    private Unit MapUnit(int id)
+    {
+        // Атрибуты — самый дорогой расчёт (бонусы и предметы), считаем один раз на все блоки.
+        var attributes = attrService.Attributes(id);
+
+        return new Unit(
+            id,
+            MapLocation(id),
+            MapVitals(id, attributes),
+            MapAttack(id, attributes),
+            MapAttributes(id, attributes),
+            MapOffence(attributes),
+            MapDefence(attributes),
+            MapProgress(id),
+            MapEquipment(id),
+            game.EntityHas<Ghost>(id));
+    }
+
+    private UnitLocation MapLocation(int id)
     {
         var transform = game.EntityGet<Transform2D>(id);
         var velocity = game.EntityGet<Velocity>(id);
-        var health = game.EntityGet<Health>(id);
-        var experience = game.EntityGet<Experience>(id);
-        var attributes = attrService.Attributes(id);
-        var body = game.EntityGet<Rigidbody>(id);
-        var attackReady = game.EntityGet<AttackCooldown>(id) == null;
 
-        var equipment = game.EntityGet<Equipment>(id);
-        var weapon = equipment?.Slots[EEquipSlot.WEAPON];
+        return new UnitLocation(
+            transform?.X ?? 0,
+            transform?.Y ?? 0,
+            velocity?.DirX ?? 0,
+            velocity?.DirY ?? 0);
+    }
+
+    private UnitVitals MapVitals(int id, EntityAttributes attributes)
+    {
+        var health = game.EntityGet<Health>(id);
 
         var lifeCurrent = health == null || double.IsNaN(health.LifeCurrent)
             ? attributes.LifeMax
@@ -88,34 +119,37 @@ public sealed class GameStateMapper(
             ? attributes.ES
             : health.EsCurrent;
 
-        return new HeroState(
-            id,
-            transform?.X ?? 0,
-            transform?.Y ?? 0,
-            velocity?.DirX ?? 0,
-            velocity?.DirY ?? 0,
+        return new UnitVitals(
             lifeCurrent,
             attributes.LifeMax,
             esCurrent,
-            experience?.Lvl ?? 1,
-            experience?.Value ?? 0,
-            experience?.Next ?? 0,
-            body?.Size ?? 25,
+            attributes.ES,
+            attributes.LifePerSecond,
+            attributes.LifePerKill);
+    }
+
+    private UnitAttack MapAttack(int id, EntityAttributes attributes)
+    {
+        return new UnitAttack(
+            attributes.AttackRange,
+            game.EntityGet<AttackCooldown>(id) == null);
+    }
+
+    private UnitAttributes MapAttributes(int id, EntityAttributes attributes)
+    {
+        var body = game.EntityGet<Rigidbody>(id);
+
+        return new UnitAttributes(
             attributes.Str,
             attributes.Dex,
             attributes.Int,
-            attributes.AttackRange,
-            attackReady,
-            attributes.ES,
-            weapon?.Name,
-            weapon == null ? null : Rarity(weapon.Rarity),
-            ToHeroStats(attributes),
-            game.EntityHas<Ghost>(id));
+            body?.Size ?? 25,
+            attributes.MovementSpeed);
     }
 
-    private static HeroStats ToHeroStats(EntityAttributes attributes)
+    private static UnitOffence MapOffence(EntityAttributes attributes)
     {
-        return new HeroStats(
+        return new UnitOffence(
             attributes.PhysicalDamageMin,
             attributes.PhysicalDamageMax,
             attributes.FireDamageMin,
@@ -128,19 +162,47 @@ public sealed class GameStateMapper(
             attributes.Accuracy,
             attributes.CriticalChance,
             attributes.CriticalMultiplier,
-            attributes.Stun,
-            attributes.StunReduction,
-            attributes.LifePerSecond,
-            attributes.LifePerKill,
+            attributes.Stun);
+    }
+
+    private static UnitDefence MapDefence(EntityAttributes attributes)
+    {
+        return new UnitDefence(
             attributes.Armour,
             attributes.PhysReduction,
             attributes.Evasion,
             attributes.Block,
             attributes.PhysReflect,
+            attributes.StunReduction,
             attributes.FireResist,
             attributes.ColdResist,
-            attributes.LightResist,
-            attributes.MovementSpeed);
+            attributes.LightResist);
+    }
+
+    private UnitProgress MapProgress(int id)
+    {
+        var experience = game.EntityGet<Experience>(id);
+        if (experience != null) return new UnitProgress(experience.Lvl, experience.Value, experience.Next);
+
+        // У монстра прогресса нет: уровень задаёт волна.
+        var monster = game.EntityGet<Monster>(id);
+        return new UnitProgress(monster?.Level ?? 1, 0, 0);
+    }
+
+    private UnitEquipment MapEquipment(int id)
+    {
+        var equipment = game.EntityGet<Equipment>(id);
+        if (equipment == null) return new UnitEquipment(Array.Empty<UnitItem>());
+
+        var items = new List<UnitItem>();
+
+        foreach (var slot in Enum.GetValues<EEquipSlot>())
+        {
+            if (!equipment.Slots.TryGetValue(slot, out var item) || item == null) continue;
+            items.Add(new UnitItem(Slot(slot), item.Name, Rarity(item.Rarity)));
+        }
+
+        return new UnitEquipment(items);
     }
 
     private WaveState? MapWave(int gameId)
@@ -149,48 +211,8 @@ public sealed class GameStateMapper(
         return wave == null ? null : new WaveState(wave.Lvl, wave.SpawnMax, wave.Spawned, wave.PrepareTimer);
     }
 
-    private List<MonsterState> MapMonsters(int gameId)
-    {
-        var result = new List<MonsterState>();
-
-        foreach (var id in game.Query<Monster, Transform2D, Rigidbody, Health, EntityAttributes>(gameId))
-        {
-            var transform = game.EntityGet<Transform2D>(id);
-            var velocity = game.EntityGet<Velocity>(id);
-            var body = game.EntityGet<Rigidbody>(id);
-            var health = game.EntityGet<Health>(id);
-            var monster = game.EntityGet<Monster>(id);
-            var equipment = game.EntityGet<Equipment>(id);
-            var attributes = attrService.Attributes(id);
-            var attackReady = game.EntityGet<AttackCooldown>(id) == null;
-
-            var lifeCurrent = health == null || double.IsNaN(health.LifeCurrent)
-                ? attributes.LifeMax
-                : health.LifeCurrent;
-            var esCurrent = health == null || double.IsNaN(health.EsCurrent)
-                ? attributes.ES
-                : health.EsCurrent;
-
-            result.Add(new MonsterState(
-                id,
-                transform?.X ?? 0,
-                transform?.Y ?? 0,
-                velocity?.DirX ?? 0,
-                velocity?.DirY ?? 0,
-                lifeCurrent,
-                attributes.LifeMax,
-                esCurrent,
-                attributes.ES,
-                body?.Size ?? 20,
-                monster?.Level ?? 1,
-                monster?.Rarity ?? EMonsterRarity.COMMON,
-                equipment == null ? 0 : EquipmentService.All(equipment).Count,
-                attributes.AttackRange,
-                attackReady));
-        }
-
-        return result;
-    }
+    /// <summary>Слот уходит строкой: enum без конвертера сериализовался бы числом.</summary>
+    private static string Slot(EEquipSlot slot) => slot.ToString().ToLowerInvariant();
 
     private static string Rarity(EItemRarity rarity)
     {
