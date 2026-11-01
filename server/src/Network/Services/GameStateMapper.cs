@@ -2,18 +2,21 @@ using BubleRpg.Network.Model;
 using BubleRpg.Server.Game.Model;
 using BubleRpg.Server.Game.Services;
 
+using Item = BubleRpg.Network.Model.Item;
+
 namespace BubleRpg.Server.Network.Services;
 
 /// <summary>
 /// Отображение доменных игровых данных в сетевую модель <see cref="GameStateMessage"/>.
 /// Живёт отдельно от транспорта: <see cref="NetworkService"/> только собирает, копит и рассылает.
+/// Две независимые операции: снимок состояния каждый тик и добыча по изменению.
 /// </summary>
 public sealed class GameStateMapper(
     GameDbContext game,
     EntityAttributesService attrService)
 {
     /// <summary>Собирает персональный снимок игры для конкретного участника.</summary>
-    public GameStateMessage Map(int gameId, string participantId)
+    public GameStateMessage MapState(int gameId, string participantId)
     {
         Unit? myHero = null;
         var enemyHeroes = new List<Unit>();
@@ -22,9 +25,12 @@ public sealed class GameStateMapper(
 
         foreach (var (entityId, hero) in game.FindComponents<BubleRpg.Server.Game.Model.Hero>(gameId))
         {
-            var unit = MapUnit(entityId);
+            // «Свой герой» вычисляем ДО MapUnit: детали экипировки нужны только владельцу,
+            // а MapUnit содержит дорогой attrService.Attributes — строить юнита дважды нельзя.
+            var isMine = hero.Id == participantId;
+            var unit = MapUnit(entityId, isMine);
 
-            if (hero.Id == participantId)
+            if (isMine)
             {
                 // Свой герой отдаётся владельцу даже мёртвым (нужен уровень для окна «ПОРАЖЕНИЕ»).
                 myHero = unit;
@@ -39,7 +45,8 @@ public sealed class GameStateMapper(
 
         foreach (var entityId in game.Query<Monster, Transform2D, Rigidbody, Health, EntityAttributes>(gameId))
         {
-            monsters.Add(MapUnit(entityId));
+            // Монстрам детали экипировки не нужны — владельца у них нет.
+            monsters.Add(MapUnit(entityId, false));
         }
 
         // Фаза мира общая, но конкретному соединению смерть его героя отдаётся как OVER.
@@ -60,6 +67,29 @@ public sealed class GameStateMapper(
             Collect<DefenceBlock>(gameId));
     }
 
+    /// <summary>
+    /// Разворачивает компонент добычи в сетевое сообщение: кучки трупов с полными предметами.
+    /// Компонента нет — добычи нет.
+    /// </summary>
+    public LootMessage MapLoot(Loot? loot)
+    {
+        if (loot == null) return new LootMessage(Array.Empty<LootDrop>());
+
+        var drops = new List<LootDrop>(loot.ItemList.Count);
+
+        // Порядок ключей в словаре после удалений не гарантирован; клиенту нужен стабильный
+        // список, поэтому сортируем по BagId (новые трупы — выше). Это не про «свежесть».
+        foreach (var (bagId, items) in loot.ItemList.OrderByDescending(entry => entry.Key))
+        {
+            var mapped = new List<Item>(items.Count);
+            foreach (var item in items) mapped.Add(MapItem(item));
+
+            drops.Add(new LootDrop(bagId, mapped));
+        }
+
+        return new LootMessage(drops);
+    }
+
     /// <summary>События боя текущего тика: каждая коллекция — свой тип события.</summary>
     public List<T> Collect<T>(int gameId) where T : class
     {
@@ -77,8 +107,9 @@ public sealed class GameStateMapper(
     /// <summary>
     /// Собирает юнита из компонентов. Герой и монстр отличаются только тем, какие компоненты
     /// заполнены: опыт есть у героя, уровень монстра задан волной, остальное общее.
+    /// <paramref name="fullEquipment"/> включает детали экипировки — только для своего героя.
     /// </summary>
-    private Unit MapUnit(int id)
+    private Unit MapUnit(int id, bool fullEquipment)
     {
         // Атрибуты — самый дорогой расчёт (бонусы и предметы), считаем один раз на все блоки.
         var attributes = attrService.Attributes(id);
@@ -92,7 +123,7 @@ public sealed class GameStateMapper(
             MapOffence(attributes),
             MapDefence(attributes),
             MapProgress(id),
-            MapEquipment(id),
+            MapEquipment(id, fullEquipment),
             game.EntityHas<Ghost>(id));
     }
 
@@ -147,7 +178,7 @@ public sealed class GameStateMapper(
             attributes.MovementSpeed);
     }
 
-    private static UnitOffence MapOffence(EntityAttributes attributes)
+    private UnitOffence MapOffence(EntityAttributes attributes)
     {
         return new UnitOffence(
             attributes.PhysicalDamageMin,
@@ -165,7 +196,7 @@ public sealed class GameStateMapper(
             attributes.Stun);
     }
 
-    private static UnitDefence MapDefence(EntityAttributes attributes)
+    private UnitDefence MapDefence(EntityAttributes attributes)
     {
         return new UnitDefence(
             attributes.Armour,
@@ -189,7 +220,7 @@ public sealed class GameStateMapper(
         return new UnitProgress(monster?.Level ?? 1, 0, 0);
     }
 
-    private UnitEquipment MapEquipment(int id)
+    private UnitEquipment MapEquipment(int id, bool fullEquipment)
     {
         var equipment = game.EntityGet<Equipment>(id);
         if (equipment == null) return new UnitEquipment(Array.Empty<UnitItem>());
@@ -199,7 +230,12 @@ public sealed class GameStateMapper(
         foreach (var slot in Enum.GetValues<EEquipSlot>())
         {
             if (!equipment.Slots.TryGetValue(slot, out var item) || item == null) continue;
-            items.Add(new UnitItem(Slot(slot), item.Name, Rarity(item.Rarity)));
+
+            //TODO: детали экипировки шлём только своему герою, иначе снапшот раздувается каждый тик.
+            IReadOnlyDictionary<string, double>? baseStats = fullEquipment ? item.Base : null;
+            IReadOnlyDictionary<string, double>? finalStats = fullEquipment ? item.Final : null;
+
+            items.Add(new UnitItem(Slot(slot), item.Name, Rarity(item.Rarity), item.Tag, baseStats, finalStats));
         }
 
         return new UnitEquipment(items);
@@ -211,10 +247,40 @@ public sealed class GameStateMapper(
         return wave == null ? null : new WaveState(wave.Lvl, wave.SpawnMax, wave.Spawned, wave.PrepareTimer);
     }
 
-    /// <summary>Слот уходит строкой: enum без конвертера сериализовался бы числом.</summary>
-    private static string Slot(EEquipSlot slot) => slot.ToString().ToLowerInvariant();
+    /// <summary>
+    /// Предмет добычи целиком: слот, итоговые характеристики, моды и ссылка на иконку.
+    /// </summary>
+    private Item MapItem(BubleRpg.Server.Game.Model.Item item)
+    {
+        return new Item(
+            item.Id,
+            Slot(EquipmentService.ResolveSlot(item)),
+            item.Name,
+            item.Class,
+            Rarity(item.Rarity),
+            item.Level,
+            new ItemRequirements(item.Str, item.Dex, item.Int),
+            item.Implicits,
+            item.Explicits,
+            item.Base,
+            item.Final,
+            ImageUrl: ItemImage(item.Icon),
+            Tag: item.Tag);
+    }
 
-    private static string Rarity(EItemRarity rarity)
+    //TODO: хост CDN захардкожен — при смене источника картинок править здесь.
+    //TODO: экипировка меняется не только выбором лута (см. EquipmentService.TakeAll в LootSystem) —
+    //сравнение считает, что надетый предмет меняется лишь тогда, когда его заменит новая добыча.
+    /// <summary>Ссылка на иконку предмета; пустой icon даёт пустую ссылку.</summary>
+    private static string ItemImage(string icon)
+    {
+        return string.IsNullOrWhiteSpace(icon) ? "" : $"https://web.poecdn.com/image/{icon}?scale=1";
+    }
+
+    /// <summary>Слот уходит строкой: enum без конвертера сериализовался бы числом.</summary>
+    private string Slot(EEquipSlot slot) => slot.ToString().ToLowerInvariant();
+
+    private string Rarity(EItemRarity rarity)
     {
         return rarity switch
         {

@@ -5,7 +5,6 @@ import * as PIXI from "pixi.js";
 import { GameState, Unit } from "../model/GameState";
 import { UnitService } from "../services/UnitService";
 import { GameStateRepository } from "../store/GameStateRepository";
-import { AttackRange } from "./AttackRange";
 
 /**
  * Рендер всех юнитов. Модель одна, поэтому общее — тело, глаза, круг атаки, интерполяция —
@@ -59,8 +58,8 @@ export class UnitRenderer implements IRenderer
         this.RenderTarget(hero);
         this.RenderBody(location.X, location.Y, size, 0x4a7fc7, 0x151d2b, alpha);
         this.RenderEye(location.X, location.Y, size, Math.atan2(location.DirY, location.DirX), alpha);
-        this.RenderLongHealth(hero);
-        AttackRange.Render(location.X, location.Y, size + hero.Attack.Range, hero.Attack.Ready);
+        this.RenderHealth(hero, true);
+        this.RenderRange(location.X, location.Y, size + hero.Attack.Range, hero.Attack.Ready);
     }
 
     private RenderEnemyHero(hero: Unit): void
@@ -68,24 +67,24 @@ export class UnitRenderer implements IRenderer
         const alpha = hero.IsGhost ? 0.4 : 1;
         const location = hero.Location;
         const size = hero.Attributes.Size;
-        const outlineColor = UnitRenderer.RarityOutline(UnitService.ItemInSlot(hero, "weapon")?.Rarity);
+        const outlineColor = this.RarityOutline(UnitService.ItemInSlot(hero, "weapon")?.Rarity);
 
         this.RenderBody(location.X, location.Y, size, 0xc77f4a, outlineColor, alpha);
         this.RenderEye(location.X, location.Y, size, Math.atan2(location.DirY, location.DirX), alpha);
-        this.RenderLongHealth(hero);
-        AttackRange.Render(location.X, location.Y, size + hero.Attack.Range, hero.Attack.Ready);
+        this.RenderHealth(hero, true);
+        this.RenderRange(location.X, location.Y, size + hero.Attack.Range, hero.Attack.Ready);
     }
 
     private RenderMonster(monster: Unit): void
     {
         const location = monster.Location;
         const size = monster.Attributes.Size;
-        const outlineColor = UnitRenderer.RarityOutline(UnitService.MaxRarity(monster));
+        const outlineColor = this.RarityOutline(UnitService.MaxRarity(monster));
 
         this.RenderBody(location.X, location.Y, size, 0xD3D3D3, outlineColor);
         this.RenderEye(location.X, location.Y, size, 0);
-        this.RenderShortHealth(monster);
-        AttackRange.Render(location.X, location.Y, size + monster.Attack.Range, monster.Attack.Ready);
+        this.RenderHealth(monster, false);
+        this.RenderRange(location.X, location.Y, size + monster.Attack.Range, monster.Attack.Ready);
 
         // Звёзды — визуализация количества надетого, считается на клиенте.
         const items = monster.Equipment.Items.length;
@@ -218,32 +217,36 @@ export class UnitRenderer implements IRenderer
         Graphics.ShapeLayer.endFill();
     }
 
-    /** Полоска героя: с подписью текущего запаса жизни. */
-    private RenderLongHealth(unit: Unit): void
+    private RenderHealth(unit: Unit, detailed: boolean): void
     {
         const { X, Y } = unit.Location;
         const size = unit.Attributes.Size;
         const { LifeCurrent, LifeMax } = unit.Vitals;
 
-        const barWidth = size * 2.4;
-        const barHeight = 6;
+        if (!(LifeMax > 0)) return;
+
+        const hpPercent = Math.min(1, Math.max(0, LifeCurrent / LifeMax));
+
+        const barWidth = detailed ? size * 2.4 : size * 2 + 6;
+        const barHeight = detailed ? 6 : 5;
         const barY = Y - size - 10;
         const barX = X - barWidth / 2;
 
-        const hpPercent = LifeMax > 0
-            ? Math.min(1, Math.max(0, LifeCurrent / LifeMax))
-            : 0;
-
-        Graphics.ShapeLayer.beginFill(0x2a1f1f);
+        // фон
+        Graphics.ShapeLayer.beginFill(detailed ? 0x2a1f1f : 0x3a1f1f);
         Graphics.ShapeLayer.drawRect(barX, barY, barWidth, barHeight);
         Graphics.ShapeLayer.endFill();
 
-        Graphics.ShapeLayer.lineStyle(1, 0x1a1f2a, 0.6);
-        Graphics.ShapeLayer.drawRect(barX, barY, barWidth, barHeight);
+        // обводка (только detailed)
+        if (detailed)
+        {
+            Graphics.ShapeLayer.lineStyle(1, 0x1a1f2a, 0.6);
+            Graphics.ShapeLayer.drawRect(barX, barY, barWidth, barHeight);
+        }
 
-        let fillColor = 0x44dd44;
-        if (hpPercent < 0.3) fillColor = 0xdd4444;
-        else if (hpPercent < 0.6) fillColor = 0xddcc44;
+        // заливка
+        let fillColor: number = 0xe34f4f;
+        if (detailed) fillColor = hpPercent < 0.3 ? 0xdd4444 : hpPercent < 0.6 ? 0xddcc44 : 0x44dd44;
 
         const fillWidth = barWidth * hpPercent;
         if (fillWidth > 0)
@@ -253,37 +256,19 @@ export class UnitRenderer implements IRenderer
             Graphics.ShapeLayer.endFill();
         }
 
-        Graphics.ShapeLayer.lineStyle(1, 0x88ccff, 0.2);
-        Graphics.ShapeLayer.drawRect(barX, barY, barWidth, barHeight);
+        // дополнительная обводка и подпись (только detailed)
+        if (detailed)
+        {
+            Graphics.ShapeLayer.lineStyle(1, 0x88ccff, 0.2);
+            Graphics.ShapeLayer.drawRect(barX, barY, barWidth, barHeight);
 
-        const label = new PIXI.Text(`${LifeCurrent.toFixed()}/${LifeMax.toFixed()}`, UnitRenderer.HealthStyle);
-        label.anchor.set(0.5, 0.5);
-        label.position.set(X, barY - 6);
-        Graphics.TextLayer.addChild(label);
+            const label = new PIXI.Text(`${LifeCurrent.toFixed()}/${LifeMax.toFixed()}`, UnitRenderer.HealthStyle);
+            label.anchor.set(0.5, 0.5);
+            label.position.set(X, barY - 6);
+            Graphics.TextLayer.addChild(label);
+        }
     }
 
-    /** Короткая полоска врага 1:1 из v1 `HealthRenderer.RenderHealthShort`. */
-    private RenderShortHealth(unit: Unit): void
-    {
-        const { X, Y } = unit.Location;
-        const size = unit.Attributes.Size;
-        const { LifeCurrent, LifeMax } = unit.Vitals;
-
-        if (!(LifeMax > 0)) return;
-
-        const barWidth = size * 2 + 6;
-        const barY = Y - size - 10;
-        const hpPercent = Math.max(0, Math.min(1, LifeCurrent / LifeMax));
-
-        Graphics.ShapeLayer.lineStyle(0);
-        Graphics.ShapeLayer.beginFill(0x3a1f1f);
-        Graphics.ShapeLayer.drawRect(X - barWidth / 2, barY, barWidth, 5);
-        Graphics.ShapeLayer.endFill();
-
-        Graphics.ShapeLayer.beginFill(0xe34f4f);
-        Graphics.ShapeLayer.drawRect(X - barWidth / 2, barY, barWidth * hpPercent, 5);
-        Graphics.ShapeLayer.endFill();
-    }
 
     private RenderStars(cx: number, cy: number, count: number): void
     {
@@ -299,8 +284,42 @@ export class UnitRenderer implements IRenderer
         }
     }
 
+
+    public RenderRange(x: number, y: number, radius: number, ready: boolean): void
+    {
+        const g = Graphics.ShapeLayer;
+        const drawColor = ready ? 0xb8a888 : 0xff4444;
+
+        const baseAlpha = 0.18;
+        const fillAlpha = baseAlpha * 0.4;
+        const lineAlpha = baseAlpha * 0.8;
+
+        g.lineStyle(1, drawColor, lineAlpha);
+        g.drawCircle(x, y, radius);
+
+        g.beginFill(drawColor, fillAlpha);
+        g.drawCircle(x, y, radius);
+        g.endFill();
+
+        const halo = this.LightenColor(drawColor, 1.6);
+        g.lineStyle(1, halo, lineAlpha * 0.4);
+        g.drawCircle(x, y, radius + 4);
+
+        g.lineStyle(1, halo, lineAlpha * 0.2);
+        g.drawCircle(x, y, radius + 8);
+    }
+
+    /** Осветлить цвет (factor > 1 — светлее, < 1 — темнее). */
+    private LightenColor(color: number, factor: number): number
+    {
+        const r = Math.min(255, Math.floor(((color >> 16) & 0xff) * factor));
+        const g = Math.min(255, Math.floor(((color >> 8) & 0xff) * factor));
+        const b = Math.min(255, Math.floor((color & 0xff) * factor));
+        return (r << 16) | (g << 8) | b;
+    }
+
     /** Обводка по редкости: клиент решает, как показать «крутизну» юнита. */
-    private static RarityOutline(rarity: string | undefined): number
+    private RarityOutline(rarity: string | undefined): number
     {
         if (rarity === "magic") return 0x1E90FF;
         if (rarity === "rare") return 0xffb703;

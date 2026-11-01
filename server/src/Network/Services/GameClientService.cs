@@ -23,8 +23,15 @@ public sealed class GameClientService(IHubContext<GameHub> hubContext)
         return participantId;
     }
 
-    public Task SendToConnectionAsync(string connectionId, GameStateMessage state, CancellationToken cancellationToken = default)
+    /// <summary>Снимок состояния игры — событие <c>"GameState"</c>, каждый тик.</summary>
+    public Task SendStateAsync(string connectionId, GameStateMessage state, CancellationToken cancellationToken = default)
     {
         return hubContext.Clients.Client(connectionId).SendAsync("GameState", state, cancellationToken);
+    }
+
+    /// <summary>Добыча — событие <c>"Loot"</c>, только при изменении набора.</summary>
+    public Task SendLootAsync(string connectionId, LootMessage loot, CancellationToken cancellationToken = default)
+    {
+        return hubContext.Clients.Client(connectionId).SendAsync("Loot", loot, cancellationToken);
     }
 }

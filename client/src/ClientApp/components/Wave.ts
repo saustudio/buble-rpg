@@ -1,27 +1,35 @@
 //#region UI
 
-import { IGameStateView } from "../core/Core";
-import { GameState } from "../model/GameState";
+import { EventBus, GameEvents } from "../core/Core";
+import { GameStateRepository } from "../store/GameStateRepository";
 
-export class WaveUI implements IGameStateView
+export class WaveUI
 {
     private readonly waveNotification: HTMLElement;
     private readonly waveNumber: HTMLElement;
     private readonly waveSub: HTMLElement;
     private readonly statWave: HTMLElement;
     private readonly statEnemiesLeft: HTMLElement;
+    private readonly unsubscribeState: () => void;
 
-    constructor()
+    constructor(
+        events: EventBus,
+        private readonly repository: GameStateRepository)
     {
         this.waveNotification = document.getElementById('waveNotification')!;
         this.waveNumber = document.getElementById('waveNumber')!;
         this.waveSub = document.getElementById('waveSub')!;
         this.statWave = document.getElementById('statWave')!;
         this.statEnemiesLeft = document.getElementById('statEnemiesLeft')!;
+
+        this.unsubscribeState = events.Subscribe<unknown>(GameEvents.StateChanged, () => this.Refresh());
     }
 
-    public Refresh(state: GameState): void
+    public Refresh(): void
     {
+        const state = this.repository.Last();
+        if (!state) return;
+
         const wave = state.Wave;
 
         this.statWave.textContent = wave ? String(wave.Lvl) : "—";

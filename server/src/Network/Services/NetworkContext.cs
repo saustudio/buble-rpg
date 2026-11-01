@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Threading.Channels;
 
 using BubleRpg.Network.Model;
@@ -18,6 +19,13 @@ public sealed class NetworkContext
         SingleWriter = false
     });
 
-    /// <summary>Незавершённые отправки: соединение → задача рассылки.</summary>
-    public readonly Dictionary<string, Task> Pending = new();
+    /// <summary>
+    /// Отправка в полёте: соединение → (задача, отправленные <c>HeroId</c>/<c>Revision</c>).
+    /// Ревизия коммитится по этой паре, а не по текущей — иначе обновление, случившееся за время полёта, потерялось бы.
+    /// Трогает только тик-поток, поэтому обычный словарь безопасен.
+    /// </summary>
+    public readonly Dictionary<string, (Task<bool> Task, int HeroId, long Revision)> Pending = new();
+
+    /// <summary>Последняя успешно доставленная добыча: соединение → (герой, ревизия).</summary>
+    public readonly ConcurrentDictionary<string, (int HeroId, long Revision)> LootRevisions = new();
 }

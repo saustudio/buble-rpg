@@ -1,11 +1,12 @@
 //#region UI
 
-import { IGameStateView } from "../core/Core";
-import { EGameState, GameState, Unit } from "../model/GameState";
+import { EventBus, GameEvents } from "../core/Core";
+import { EGameState, Unit } from "../model/GameState";
 import { UnitService } from "../services/UnitService";
+import { GameStateRepository } from "../store/GameStateRepository";
 
 /** Панель цели под атакой: и монстр, и чужой герой. */
-export class EnemyHudUI implements IGameStateView
+export class EnemyHudUI
 {
     private readonly panel: HTMLElement;
     private readonly hpFill: HTMLElement;
@@ -13,8 +14,11 @@ export class EnemyHudUI implements IGameStateView
     private readonly hpText: HTMLElement;
     private readonly rarity: HTMLElement;
     private readonly level: HTMLElement;
+    private readonly unsubscribeState: () => void;
 
-    constructor()
+    constructor(
+        events: EventBus,
+        private readonly repository: GameStateRepository)
     {
         this.panel = document.getElementById("enemyInfo")!;
         this.hpFill = document.getElementById("enemyHpFill")!;
@@ -22,10 +26,19 @@ export class EnemyHudUI implements IGameStateView
         this.hpText = document.getElementById("enemyHpText")!;
         this.rarity = document.getElementById("enemyRarity")!;
         this.level = document.getElementById("enemyLevel")!;
+
+        this.unsubscribeState = events.Subscribe<unknown>(GameEvents.StateChanged, () => this.Refresh());
     }
 
-    public Refresh(state: GameState): void
+    public Refresh(): void
     {
+        const state = this.repository.Last();
+        if (!state)
+        {
+            this.Hide();
+            return;
+        }
+
         const targetId = state.Phase === EGameState.PLAY ? state.EnemyTarget : null;
 
         if (targetId == null)

@@ -3,10 +3,12 @@ import { EventBus } from "../core/EventBus";
 import { GameEvents } from "../core/GameEvents";
 import { EGameState, GameState } from "../model/GameState";
 import { GameStateMessage } from "../model/network/GameStateMessage";
+import { LootMessage } from "../model/network/LootMessage";
 import { GuestAuthService } from "./GuestAuthService";
 import { IGameService } from "./IGameService";
 import { GameSessionRepository } from "../store/GameSessionRepository";
 import { GameStateRepository } from "../store/GameStateRepository";
+import { LootRepository } from "../store/LootRepository";
 
 export class GameHubService implements IGameService
 {
@@ -19,6 +21,7 @@ export class GameHubService implements IGameService
 
     constructor(
         private readonly repository: GameStateRepository,
+        private readonly lootRepository: LootRepository,
         private readonly events: EventBus,
         private readonly baseUrl: string)
     {
@@ -73,9 +76,14 @@ export class GameHubService implements IGameService
         await this.InvokeAsync("ChooseWaveBonus", bonusId);
     }
 
-    public async PickLoot(itemId: string): Promise<void>
+    public async PickLoot(bagId: number, itemId: string): Promise<void>
     {
-        await this.InvokeAsync("PickLoot", itemId);
+        await this.InvokeAsync("PickLoot", bagId, itemId);
+    }
+
+    public async DiscardLoot(bagId: number): Promise<void>
+    {
+        await this.InvokeAsync("DiscardLoot", bagId);
     }
 
     public async Respawn(): Promise<void>
@@ -94,6 +102,7 @@ export class GameHubService implements IGameService
             .build();
 
         hub.on("GameState", this.OnGameState.bind(this));
+        hub.on("Loot", this.OnLoot.bind(this));
         hub.onreconnected(this.OnReconnected.bind(this));
 
         return hub;
@@ -115,9 +124,19 @@ export class GameHubService implements IGameService
 
     private OnGameState(state: GameStateMessage): void
     {
+        // Героя нет (смерть или ещё не создан) — добычи быть не может, гасим прежнюю.
+        if (state.MyHero == null) this.lootRepository.Clear();
+
         const gameState = this.ToViewFromDto(state, performance.now());
         this.repository.Create(gameState);
         this.events.Publish(GameEvents.StateChanged, gameState);
+    }
+
+    /** Добыча изменилась: сервер прислал новый набор мешков целиком. */
+    private OnLoot(message: LootMessage): void
+    {
+        this.lootRepository.Replace(message);
+        this.events.Publish(GameEvents.LootChanged, undefined);
     }
 
     /** Сетевой снимок → View-модель: добавляет клиентские поля, которых нет в проводе. */

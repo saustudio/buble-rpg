@@ -10,7 +10,7 @@ public sealed class EquipmentService(GameDbContext store)
         return store.EntityGet<Equipment>(id);
     }
 
-    public static EEquipSlot ResolveSlot(Equipment equipment, Item item)
+    public static EEquipSlot ResolveSlot(Item item)
     {
         return item.Tag switch
         {
@@ -30,10 +30,24 @@ public sealed class EquipmentService(GameDbContext store)
 
     public static (EEquipSlot Slot, Item? Replaced) Equip(Equipment equipment, Item item)
     {
-        var slot = ResolveSlot(equipment, item);
+        var slot = ResolveSlot(item);
         equipment.Slots.TryGetValue(slot, out var replaced);
         equipment.Slots[slot] = item;
         return (slot, replaced);
+    }
+
+    /// <summary>Кладёт предмет в уже вычисленный слот; заменённый предмет молча теряется.</summary>
+    public static void EquipAt(Equipment equipment, EEquipSlot slot, Item item) => equipment.Slots[slot] = item;
+
+    /// <summary>Снимает все слоты и отдаёт те же инстансы предметов (лут переносится, а не копируется).</summary>
+    public static List<Item> TakeAll(Equipment equipment)
+    {
+        var result = All(equipment);
+
+        foreach (var slot in Enum.GetValues<EEquipSlot>())
+            equipment.Slots[slot] = null;
+
+        return result;
     }
 
     public static Item? Unequip(Equipment equipment, EEquipSlot slot)

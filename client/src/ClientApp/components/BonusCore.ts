@@ -2,7 +2,9 @@
 
 import { UIDialog } from "./Dialog";
 import { BonusEffect, BonusOffer, EGameState, GameState } from "../model/GameState";
-import { IGameStateView } from "../core/Core";
+import { EventBus, GameEvents } from "../core/Core";
+import { GameStateRepository } from "../store/GameStateRepository";
+import { NavBarUI } from "./NavBar";
 
 /** Описание карточки бонуса для UI. */
 export interface BonusCardView
@@ -17,43 +19,55 @@ export interface BonusCardView
 /**
  * Общий UI отображения серверного предложения бонусов.
  */
-export abstract class BonusUI implements IGameStateView
+export abstract class BonusUI extends UIDialog
 {
+    private lastOfferSignature = "";
+
     protected constructor(
-        protected readonly dialog: UIDialog,
+        id: string,
+        events: EventBus,
+        protected readonly repository: GameStateRepository,
+        protected readonly navBar: NavBarUI,
         protected readonly getOffer: (state: GameState) => readonly BonusOffer[],
         protected readonly onChoose: (bonusId: string) => void)
     {
+        super(id);
+        events.Subscribe<unknown>(GameEvents.StateChanged, () => this.Refresh());
     }
 
     protected abstract GetView(bonus: BonusOffer): BonusCardView | undefined;
     protected abstract RenderBody(bonus: BonusOffer): string;
     protected abstract FormatEffect(effect: BonusEffect): string;
 
-    public Refresh(state: GameState): void
+    public Refresh(): void
     {
-        if (state.Phase === EGameState.OVER)
-        {
-            this.dialog.Close();
-            return;
-        }
+        const state = this.repository.Last();
+        const offer = !state || state.Phase === EGameState.OVER ? [] : this.getOffer(state);
 
-        const offer = this.getOffer(state);
         if (offer.length === 0)
         {
-            this.dialog.Close();
+            if (this.Visibled) this.navBar.Close(this.Id);
+            this.lastOfferSignature = "";
             return;
         }
 
-        if (this.dialog.Visibled) return;
+        if (this.Visibled && this.lastOfferSignature !== JSON.stringify(offer))
+            this.LoadDialog(offer);
+    }
 
-        this.dialog.Open();
-        this.LoadDialog(offer);
+    protected OpenOffer(): void
+    {
+        const state = this.repository.Last();
+        if (!state || state.Phase === EGameState.OVER || this.getOffer(state).length === 0) return;
+
+        super.Open();
+        this.Refresh();
     }
 
     private LoadDialog(list: readonly BonusOffer[]): void
     {
-        this.dialog.Container.innerHTML = '';
+        this.lastOfferSignature = JSON.stringify(list);
+        this.Container.innerHTML = '';
 
         const cardContainer = document.createElement("div");
         cardContainer.className = "bonus-cards";
@@ -65,7 +79,7 @@ export abstract class BonusUI implements IGameStateView
             cardContainer.appendChild(card);
         }
 
-        this.dialog.Container.appendChild(cardContainer);
+        this.Container.appendChild(cardContainer);
     }
 
     private BuildCard(bonus: BonusOffer): HTMLElement

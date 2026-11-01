@@ -1,24 +1,29 @@
 //#region UI
 
-import { IGameStateView } from "../core/Core";
-import { GameState } from "../model/GameState";
+import { EventBus, GameEvents } from "../core/Core";
+import { GameStateRepository } from "../store/GameStateRepository";
 
-export class ExperienceUI implements IGameStateView
+export class ExperienceUI
 {
     private readonly xpText: HTMLElement;
     private readonly statLevel: HTMLElement;
     private readonly xpBarFill: HTMLElement;
+    private readonly unsubscribeState: () => void;
 
-    constructor()
+    constructor(
+        events: EventBus,
+        private readonly repository: GameStateRepository)
     {
         this.xpText = document.getElementById('xpText')!;
         this.statLevel = document.getElementById('statLevel')!;
         this.xpBarFill = document.getElementById('xpBarFill')!;
+
+        this.unsubscribeState = events.Subscribe<unknown>(GameEvents.StateChanged, () => this.Refresh());
     }
 
-    public Refresh(state: GameState): void
+    public Refresh(): void
     {
-        const hero = state.MyHero;
+        const hero = this.repository.Last()?.MyHero;
         if (!hero) return;
 
         const progress = hero.Progress;

@@ -1,5 +1,7 @@
 using BubleRpg.Server.Game.Model;
 
+using Microsoft.Extensions.Logging;
+
 using GameModel = BubleRpg.Server.Game.Model.Game;
 
 namespace BubleRpg.Server.Game.Services;
@@ -10,7 +12,10 @@ namespace BubleRpg.Server.Game.Services;
 /// уничтожается. Данные (сущности, компоненты, состав) — в контексте, решений он не принимает.
 /// Завершённая игра помечается <see cref="EGameState.OVER"/> и пропускается системами.
 /// </summary>
-public sealed class GameService(GameDbContext context)
+public sealed class GameService(
+    GameDbContext context,
+    EntityAttributesService attrService,
+    ILogger<GameService> logger)
 {
     /// <summary>Игра, к которой относится участник, либо <c>null</c>, если он ещё не подключён.</summary>
     public int? GameOf(string participantId)
@@ -88,20 +93,100 @@ public sealed class GameService(GameDbContext context)
     /// <summary>Выбор бонуса волны.</summary>
     public void ChooseWaveBonus(string participantId, string bonusId) => ChooseBonus(participantId, bonusId, EBonusSource.Wave);
 
-    /// <summary>Выбор предмета из добычи.</summary>
-    public void PickLoot(string participantId, string itemId)
+    /// <summary>
+    /// Выбор предмета из мешка. С одного трупа берётся ровно один предмет, остальные сгорают;
+    /// заменённый предмет выбрасывается. Мешок адресуется <paramref name="bagId"/> (id трупа),
+    /// предмет — <paramref name="itemId"/>. Мёртвый герой, чужая фаза, невыполненные требования
+    /// и неизвестный идентификатор отклоняются молча (Debug-лог). Компонент <see cref="Loot"/>
+    /// при опустении не удаляется: иначе <c>Revision</c> сбросился бы к 0 и переиспользовался.
+    /// </summary>
+    public void PickLoot(string participantId, int bagId, string itemId)
+    {
+        var heroId = HeroOf(participantId);
+        if (heroId == null)
+        {
+            logger.LogDebug("PickLoot: у участника {Participant} нет героя.", participantId);
+            return;
+        }
+
+        var gameId = GameOf(participantId);
+        var gameState = gameId != null ? context.Single<GameState>(gameId.Value) : null;
+        if (gameState == null || gameState.State != EGameState.PLAY)
+        {
+            logger.LogDebug("PickLoot: герой {Hero} вне фазы PLAY.", heroId.Value);
+            return;
+        }
+
+        var loot = context.EntityGet<Loot>(heroId.Value);
+        if (loot == null) return;
+
+        // NaN — здоровье ещё не инициализировано, то есть герой полон.
+        var health = context.EntityGet<Health>(heroId.Value);
+        if (health != null && !double.IsNaN(health.LifeCurrent) && health.LifeCurrent <= 0)
+        {
+            logger.LogDebug("PickLoot: герой {Hero} мёртв.", heroId.Value);
+            return;
+        }
+
+        var equipment = context.EntityGet<Equipment>(heroId.Value);
+        if (equipment == null) return;
+
+        if (!loot.ItemList.TryGetValue(bagId, out var items))
+        {
+            logger.LogDebug("PickLoot: у героя {Hero} нет мешка {Bag}.", heroId.Value, bagId);
+            return;
+        }
+
+        var picked = items.FirstOrDefault(item => item.Id == itemId);
+        if (picked == null)
+        {
+            logger.LogDebug("PickLoot: в мешке {Bag} нет предмета {Item}.", bagId, itemId);
+            return;
+        }
+
+        // Та же формула, что на клиенте (ItemService.RequirementsMet): порог «ровно» проходит.
+        // TODO: self-replacement — Attributes включает Final заменяемого предмета, после Equip требования могут не выполняться.
+        var attrs = attrService.Attributes(heroId.Value);
+        if (picked.Str > attrs.Str || picked.Dex > attrs.Dex || picked.Int > attrs.Int)
+        {
+            logger.LogDebug(
+                "PickLoot: требования не выполнены (нужно {Str}/{Dex}/{Int}, есть {HaveStr}/{HaveDex}/{HaveInt}).",
+                picked.Str, picked.Dex, picked.Int, attrs.Str, attrs.Dex, attrs.Int);
+            return;
+        }
+
+        EEquipSlot slot;
+        try { slot = EquipmentService.ResolveSlot(picked); }
+        catch (InvalidOperationException exception)
+        {
+            logger.LogDebug(exception, "PickLoot: нет слота для предмета {Item}.", picked.Id);
+            return;
+        }
+
+        loot.TakeBag(bagId);
+        EquipmentService.EquipAt(equipment, slot, picked);
+
+        logger.LogDebug("PickLoot: hero={Hero}, bag={Bag}, item={Item}, slot={Slot}.", heroId.Value, bagId, picked.Id, slot);
+    }
+
+    /// <summary>Удаляет сумку с добычей целиком, если герой существует, жив и находится в фазе PLAY.</summary>
+    public void DiscardLoot(string participantId, int bagId)
     {
         var heroId = HeroOf(participantId);
         if (heroId == null) return;
 
-        var pick = context.EntityGet<LootPick>(heroId.Value);
-        if (pick == null)
-        {
-            context.EntitySet(heroId.Value, new LootPick { ItemId = itemId });
-            return;
-        }
+        var gameId = GameOf(participantId);
+        var gameState = gameId != null ? context.Single<GameState>(gameId.Value) : null;
+        if (gameState == null || gameState.State != EGameState.PLAY) return;
 
-        pick.ItemId = itemId;
+        var loot = context.EntityGet<Loot>(heroId.Value);
+        if (loot == null) return;
+
+        var health = context.EntityGet<Health>(heroId.Value);
+        if (health != null && !double.IsNaN(health.LifeCurrent) && health.LifeCurrent <= 0) return;
+
+        if (loot.TakeBag(bagId) == null)
+            logger.LogDebug("DiscardLoot: у героя {Hero} нет мешка {Bag}.", heroId.Value, bagId);
     }
 
     /// <summary>Список игр для будущего выбора комнаты игроком.</summary>

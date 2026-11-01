@@ -1,28 +1,34 @@
 //#region module
 
-import { EventBus, GameEvents, IGameStateView, Input } from "../core/Core";
+import { EventBus, GameEvents, Input } from "../core/Core";
 import { UIDialog } from "./Dialog";
 import { WaveUI } from "./Wave";
 import { WaveBonusUI } from "./WaveBonuses";
-import { StatsUI } from "./Stats";
+import { WeaponStatsUI, CharacterStatsUI, DefenceStatsUI } from "./Stats";
 import { EnemyHudUI } from "./EnemyHud";
-import { LootUI } from "./Loot";
+import { InventoryUI } from "./Inventory";
 import { ExperienceUI } from "./Experience";
 import { ExperienceBonusUI } from "./ExperienceBonuses";
 import { GameOverUI } from "./GameOver";
-import { GameState } from "../model/GameState";
+import { MiscUI } from "./MiscUI";
+import { MapUI } from "./MapUI";
+import { QuestsUI } from "./QuestsUI";
+import { SkillsUI } from "./SkillsUI";
+import { NavBarUI } from "./NavBar";
+import { SystemDialog } from "./SystemDialog";
 import { GameStateRepository } from "../store/GameStateRepository";
+import { LootRepository } from "../store/LootRepository";
 import { IGameService } from "../services/IGameService";
 
 export class IndexPage
 {
-    private views: IGameStateView[] = [];
     private closeHandlers: (() => void)[] = [];
     private errorDialog: UIDialog | null = null;
     private loadingDialog: UIDialog | null = null;
 
     constructor(
         private readonly repository: GameStateRepository,
+        private readonly lootRepository: LootRepository,
         private readonly events: EventBus,
         private readonly gameService: IGameService)
     {
@@ -43,23 +49,30 @@ export class IndexPage
 
         document.getElementById("errorRestartBtn")?.addEventListener("click", this.OnRestartClick.bind(this));
 
-        this.errorDialog = new UIDialog("error");
-        this.loadingDialog = new UIDialog("loading");
+        this.errorDialog = new SystemDialog("error");
+        this.loadingDialog = new SystemDialog("loading");
         this.loadingDialog.Open();
 
-        this.views =
-            [
-                new WaveUI(),
-                new WaveBonusUI(new UIDialog("wave"), this.gameService),
-                new StatsUI(),
-                new EnemyHudUI(),
-                new LootUI(new UIDialog("loot")),
-                new ExperienceUI(),
-                new ExperienceBonusUI(new UIDialog("levelup"), this.gameService),
-                new GameOverUI(new UIDialog("gameover"), () => void this.gameService.Respawn()),
-            ];
+        new WaveUI(this.events, this.repository);
+        new EnemyHudUI(this.events, this.repository);
+        new ExperienceUI(this.events, this.repository);
+        new GameOverUI(this.events, this.repository, new SystemDialog("gameover"), () => void this.gameService.Respawn());
 
-        this.events.Subscribe<GameState>(GameEvents.StateChanged, this.OnGameStateChanged.bind(this));
+        const navBar = new NavBarUI(this.events, this.repository, this.lootRepository);
+        navBar.RegisterDialogs([
+            new WaveBonusUI(this.events, this.repository, this.gameService, navBar),
+            new WeaponStatsUI(this.events, this.repository),
+            new CharacterStatsUI(this.events, this.repository),
+            new DefenceStatsUI(this.events, this.repository),
+            new InventoryUI(this.events, this.repository, this.lootRepository, this.gameService),
+            new SkillsUI(),
+            new QuestsUI(),
+            new MapUI(),
+            new MiscUI(),
+            new ExperienceBonusUI(this.events, this.repository, this.gameService, navBar)]);
+
+        // Снимок приходит каждый тик, но заглушку загрузки закрываем только один раз.
+        this.events.Subscribe<unknown>(GameEvents.StateChanged, this.OnFirstState.bind(this));
     }
 
     private OnUnload(): void
@@ -81,17 +94,16 @@ export class IndexPage
         void this.gameService.MoveTo(hero.Location.X, hero.Location.Y);
     }
 
-    private OnGameStateChanged(state: GameState): void
+    private OnFirstState(): void
     {
-        if (this.loadingDialog.Visibled) this.loadingDialog.Close();
-        for (const view of this.views) view.Refresh(state);
+        if (this.loadingDialog?.Visibled) this.loadingDialog.Close();
     }
 
     private OnGameError(error: unknown): void
     {
         const message = error instanceof Error ? error.message : String(error);
-        if (this.loadingDialog.Visibled) this.loadingDialog.Close();
-        this.errorDialog.Container.querySelector("#errorMessage")!.textContent = message;
+        if (this.loadingDialog?.Visibled) this.loadingDialog.Close();
+        this.errorDialog!.Container.querySelector("#errorMessage")!.textContent = message;
         this.errorDialog?.Open();
     }
 

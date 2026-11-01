@@ -1,8 +1,10 @@
-import { UIDialog } from "./Dialog";
 import { BonusEffect, BonusOffer } from "../model/GameState";
 import { EBonusEffectType, EBonusModifier } from "../model/Bonus";
 import { BonusCardView, BonusUI } from "./BonusCore";
 import { IGameService } from "../services/IGameService";
+import { GameStateRepository } from "../store/GameStateRepository";
+import { EventBus } from "../core/Core";
+import { NavBarUI } from "./NavBar";
 
 /** UI выбора бонуса волны. */
 export class WaveBonusUI extends BonusUI
@@ -37,10 +39,17 @@ export class WaveBonusUI extends BonusUI
     };
 
     constructor(
-        dialog: UIDialog,
-        gameService: IGameService)
+        events: EventBus,
+        repository: GameStateRepository,
+        gameService: IGameService,
+        navBar: NavBarUI)
     {
-        super(dialog, state => state.WaveBonusOffer, bonusId => gameService.ChooseWaveBonus(bonusId));
+        super("wave", events, repository, navBar, state => state.WaveBonusOffer, bonusId => gameService.ChooseWaveBonus(bonusId));
+    }
+
+    public Open(): void
+    {
+        this.OpenOffer();
     }
 
     protected GetView(bonus: BonusOffer): BonusCardView | undefined

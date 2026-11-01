@@ -1,21 +1,31 @@
 //#region UI
 
-import { IGameStateView } from "../core/Core";
+import { EventBus, GameEvents } from "../core/Core";
 import { UIDialog } from "./Dialog";
 import { EGameState, GameState } from "../model/GameState";
+import { GameStateRepository } from "../store/GameStateRepository";
 
-export class GameOverUI implements IGameStateView
+export class GameOverUI
 {
+    private readonly unsubscribeState: () => void;
+
     constructor(
+        events: EventBus,
+        private readonly repository: GameStateRepository,
         private readonly dialog: UIDialog,
         private readonly onRestart?: () => void)
     {
         const btnRestart = this.dialog.Container.querySelector<HTMLElement>(".btn-restart");
         btnRestart?.addEventListener("click", () => this.onRestart?.());
+
+        this.unsubscribeState = events.Subscribe<unknown>(GameEvents.StateChanged, () => this.Refresh());
     }
 
-    public Refresh(state: GameState): void
+    public Refresh(): void
     {
+        const state = this.repository.Last();
+        if (!state) return;
+
         // После респавна фаза снова PLAY — окно закрывается, соединение остаётся.
         if (state.Phase !== EGameState.OVER)
         {

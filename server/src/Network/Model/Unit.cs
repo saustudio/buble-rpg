@@ -84,14 +84,21 @@ public sealed record UnitProgress(
     double ExperienceNext);
 
 /// <summary>
-/// Надетые предметы. Деталей здесь нет: моды и уровень предмета приходят отдельным
-/// запросом осмотра, их незачем слать каждый тик.
+/// Надетые предметы. Для чужого юнита деталей нет — они нужны только своему герою для
+/// сравнения добычи, поэтому <see cref="UnitItem.Base"/> и <see cref="UnitItem.Final"/>
+/// заполняются лишь владельцу.
 /// </summary>
 public sealed record UnitEquipment(
     IReadOnlyList<UnitItem> Items);
 
-/// <summary>Предмет без деталей: только то, что нужно для значка и подписи.</summary>
+/// <summary>
+/// Предмет без полной информации: слот, имя и редкость для значка. Детали (<see cref="Base"/> и
+/// <see cref="Final"/>) приходят только своему герою — иначе снапшот раздувается.
+/// </summary>
 public sealed record UnitItem(
     string Slot,
     string Name,
-    string Rarity);
+    string Rarity,
+    string Tag,
+    IReadOnlyDictionary<string, double>? Base,
+    IReadOnlyDictionary<string, double>? Final);

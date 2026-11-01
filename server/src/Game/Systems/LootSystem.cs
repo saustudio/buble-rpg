@@ -1,61 +1,82 @@
 using BubleRpg.Server.Game.Model;
 using BubleRpg.Server.Game.Services;
 
+using Microsoft.Extensions.Logging;
+
 namespace BubleRpg.Server.Game.Systems;
 
-public sealed class LootSystem(
-    GameDbContext store,
-    ILogger<LootSystem> logger) : IGameSystem
+/// <summary>
+/// Создаёт мешки с трупов. Убийца определяется по ударам текущего тика: мёртвую цель нельзя выбрать
+/// (<see cref="AttackSystem"/> пропускает <c>LifeCurrent &lt;= 0</c>), а удары снимаются в начале следующего тика,
+/// поэтому наличие <see cref="AttackHit"/> по цели с <c>LifeCurrent &lt;= 0</c> означает смерть ровно в этом тике.
+/// Мешок забирает живой герой с сильнейшим ударом: монстры лут не собирают и не конкурируют за него.
+/// <para/>
+/// TODO: атрибуция по суммарному урону за бой (накопление на жертве), сейчас — сильнейший удар тика.
+/// TODO: детерминизм при ничьей (например, по меньшему id источника), сейчас — порядок Query&lt;AttackHit&gt;.
+/// TODO: отражённый урон (PhysReflect) не проходит митигацию цели — сравнение силы не строго однородно.
+/// </summary>
+public sealed class LootSystem(GameDbContext store, ILogger<LootSystem> logger) : IGameSystem
 {
     public void Update(double deltaTime)
     {
         foreach (var gameId in store.GameIds())
         {
-            ApplyPicks(gameId);
-
             var gs = store.Single<GameState>(gameId);
             if (gs == null || gs.State == EGameState.PAUSE || gs.State == EGameState.OVER) continue;
 
-            foreach (var hitEntity in store.Query<AttackHit>(gameId))
+            foreach (var (target, hit) in StrongestHeroHits(gameId))
             {
-                var hit = store.EntityGet<AttackHit>(hitEntity);
-                var health = store.EntityGet<Health>(hit.Target);
-                if (health == null || health.LifeCurrent > 0) continue;
+                var health = store.EntityGet<Health>(target);
+                if (health == null || double.IsNaN(health.LifeCurrent) || health.LifeCurrent > 0) continue;
 
-                var equipment = store.EntityGet<Equipment>(hit.Target);
+                var equipment = store.EntityGet<Equipment>(target);
                 if (equipment == null) continue;
 
-                var lootList = EquipmentService.All(equipment);
-                if (lootList.Count == 0) continue;
+                // Перенос, а не ссылка: экипировка снимается с жертвы и уходит в мешок.
+                var items = EquipmentService.TakeAll(equipment);
+                if (items.Count == 0) continue;
 
                 var loot = store.EntityGet<Loot>(hit.Source);
                 if (loot == null)
                 {
-                    var map = new Dictionary<int, List<Item>>
-                    {
-                        [hit.Target] = lootList
-                    };
-                    store.EntitySet(hit.Source, new Loot(map));
+                    loot = new Loot();
+                    store.EntitySet(hit.Source, loot);
                 }
-                else
-                {
-                    loot.ItemList[hit.Target] = lootList;
-                }
+
+                loot.AddBag(target, items);
+
+                logger.LogDebug(
+                    "Loot: killer={Killer}, bag={Bag}, revision={Revision}, items={Count}.",
+                    hit.Source, target, loot.Revision, items.Count);
             }
         }
     }
 
-    private void ApplyPicks(int gameId)
+    /// <summary>Для каждой цели — живой герой с сильнейшим своим ударом в этом тике.</summary>
+    private Dictionary<int, AttackHit> StrongestHeroHits(int gameId)
     {
-        foreach (var (entityId, pick) in store.FindComponents<LootPick>(gameId))
-        {
-            // TODO: найти лут героя и надеть предмет.
-            logger.LogWarning(
-                "Loot pickup is not implemented yet: hero {HeroId}, item {ItemId}.",
-                entityId,
-                pick.ItemId);
+        var strongest = new Dictionary<int, AttackHit>();
 
-            store.EntityRemoveSet<LootPick>(entityId);
+        foreach (var hitEntity in store.Query<AttackHit>(gameId))
+        {
+            var hit = store.EntityGet<AttackHit>(hitEntity);
+            if (hit == null) continue;
+
+            // Монстры лут не собирают и не конкурируют за него.
+            if (!store.EntityHas<Hero>(hit.Source)) continue;
+
+            // Мёртвый источник мешок получить не может.
+            var sourceHealth = store.EntityGet<Health>(hit.Source);
+            if (sourceHealth != null && !double.IsNaN(sourceHealth.LifeCurrent) && sourceHealth.LifeCurrent <= 0) continue;
+
+            var amount = Damage(hit);
+
+            if (!strongest.TryGetValue(hit.Target, out var current)) strongest[hit.Target] = hit;
+            else if (amount > Damage(current)) strongest[hit.Target] = hit;
         }
+
+        return strongest;
     }
+
+    private static double Damage(AttackHit hit) => hit.Phys + hit.Fire + hit.Cold + hit.Light;
 }

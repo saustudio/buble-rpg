@@ -4,14 +4,16 @@ import { GameHubService } from "./services/GameHubService";
 import { BattleEffectRenderer } from "./rendering/BattleEffectRenderer";
 import { UnitRenderer } from "./rendering/UnitRenderer";
 import { GameStateRepository } from "./store/GameStateRepository";
+import { LootRepository } from "./store/LootRepository";
 import { IndexPage } from "./components/IndexPage";
 
 export class Main
 {
     private readonly baseUrl = "https://localhost:7288/";
     private readonly repository = new GameStateRepository();
+    private readonly lootRepository = new LootRepository();
     private readonly events = new EventBus();
-    private readonly connection = new GameHubService(this.repository, this.events, this.baseUrl);
+    private readonly connection = new GameHubService(this.repository, this.lootRepository, this.events, this.baseUrl);
 
     public async Run(): Promise<void>
     {
@@ -22,7 +24,7 @@ export class Main
 
     private InitUI(): void
     {
-        const page = new IndexPage(this.repository, this.events, this.connection);
+        const page = new IndexPage(this.repository, this.lootRepository, this.events, this.connection);
         page.OnClose(() => { Graphics.Stop(); this.connection.Stop(); });
     }
 

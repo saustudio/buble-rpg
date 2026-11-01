@@ -29,7 +29,13 @@ public sealed class WaveBonusChoiceData : HeroActionData
 
 public sealed class LootPickData : HeroActionData
 {
+    public int BagId { get; init; }
     public string ItemId { get; init; } = string.Empty;
+}
+
+public sealed class LootDiscardData : HeroActionData
+{
+    public int BagId { get; init; }
 }
 
 public sealed class HeroSpawnData : NetworkData

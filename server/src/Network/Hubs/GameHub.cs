@@ -22,6 +22,9 @@ public sealed class GameHub(NetworkContext data, GameClientService clients) : Hu
     {
         var participantId = clients.Remove(Context.ConnectionId);
         if (participantId != null) data.Queue.Writer.TryWrite(new HeroDisconnectData { Id = participantId });
+
+        // Ревизия добычи привязана к соединению: реконнект с новым id не должен наследовать чужую.
+        data.LootRevisions.TryRemove(Context.ConnectionId, out _);
         return base.OnDisconnectedAsync(exception);
     }
 
@@ -49,10 +52,17 @@ public sealed class GameHub(NetworkContext data, GameClientService clients) : Hu
         BonusId = bonusId
     });
 
-    public Task PickLoot(string itemId) => SaveData(new LootPickData
+    public Task PickLoot(int bagId, string itemId) => SaveData(new LootPickData
     {
         Id = GuestId,
+        BagId = bagId,
         ItemId = itemId
+    });
+
+    public Task DiscardLoot(int bagId) => SaveData(new LootDiscardData
+    {
+        Id = GuestId,
+        BagId = bagId
     });
 
     private Task SaveData(NetworkData entry)

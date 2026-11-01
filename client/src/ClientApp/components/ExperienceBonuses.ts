@@ -1,10 +1,12 @@
 //#region UI
 
-import { UIDialog } from "./Dialog";
 import { BonusEffect, BonusOffer } from "../model/GameState";
 import { EBonusEffectType, EBonusModifier } from "../model/Bonus";
 import { BonusCardView, BonusUI } from "./BonusCore";
 import { IGameService } from "../services/IGameService";
+import { GameStateRepository } from "../store/GameStateRepository";
+import { EventBus } from "../core/Core";
+import { NavBarUI } from "./NavBar";
 
 /** UI выбора бонуса уровня. */
 export class ExperienceBonusUI extends BonusUI
@@ -110,10 +112,17 @@ export class ExperienceBonusUI extends BonusUI
     };
 
     constructor(
-        dialog: UIDialog,
-        gameService: IGameService)
+        events: EventBus,
+        repository: GameStateRepository,
+        gameService: IGameService,
+        navBar: NavBarUI)
     {
-        super(dialog, state => state.ExperienceBonusOffer, bonusId => gameService.ChooseLevelBonus(bonusId));
+        super("levelup", events, repository, navBar, state => state.ExperienceBonusOffer, bonusId => gameService.ChooseLevelBonus(bonusId));
+    }
+
+    public Open(): void
+    {
+        this.OpenOffer();
     }
 
     protected GetView(bonus: BonusOffer): BonusCardView | undefined
